@@ -7,6 +7,12 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-cocoims}
       POSTGRES_USER: ${POSTGRES_USER:-cocoims}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cocoims_dev_local_only}
+    # pg_stat_statements must be loaded at server start (CLAUDE.md PERFORMANCE:
+    # "pg_stat_statements stays enabled"; SPEC §6.5) — CREATE EXTENSION alone
+    # fails without this, since the extension hooks planner/executor callbacks
+    # that only exist if the shared library was preloaded before Postgres
+    # initialized its shared memory.
+    command: postgres -c shared_preload_libraries=pg_stat_statements
     ports:
       # 5432 is already bound by another project's container on this machine,
       # so cocoims-db is published on 5433 (see .env DATABASE_URL).
