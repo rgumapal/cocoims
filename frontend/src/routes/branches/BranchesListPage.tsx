@@ -37,7 +37,10 @@ export default function BranchesListPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="Branches" />
+      <PageHeader
+        title="Branches"
+        description="Every Cocopan branch, its status, and who manages it."
+      />
       <div className="flex-1 overflow-hidden">
         <DataTable
           data={data?.items ?? []}

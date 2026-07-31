@@ -83,7 +83,10 @@ export default function RefDataPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="Reference Data" />
+      <PageHeader
+        title="Reference Data"
+        description="Categories, units, clusters, areas, routes, and reason codes used across the system."
+      />
       <div className="flex gap-1 border-b border-border px-4">
         {TABS.map((t) => (
           <button

@@ -50,6 +50,14 @@
 
 /* ---------- light ---------- */
 [data-theme="light"] {
+  /* Without this, Chromium paints native form controls (<select>,
+     scrollbars, etc.) using the OS/browser's own dark preference whenever
+     it's set to dark, regardless of our data-theme attribute or explicit
+     background-color — the app's own semantic tokens don't reach that
+     layer of native widget chrome unless color-scheme says which palette
+     to use. */
+  color-scheme: light;
+
   --bg: var(--n-25);
   --surface: var(--n-0);
   --surface-2: var(--n-50); /* table header, zebra */
@@ -80,6 +88,8 @@
 
 /* ---------- dark ---------- */
 [data-theme="dark"] {
+  color-scheme: dark;
+
   --bg: var(--n-950);
   --surface: var(--n-900);
   --surface-2: var(--n-800);

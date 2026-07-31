@@ -54,6 +54,7 @@ export default function ItemsListPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Items"
+        description="The network item master — SKUs, pricing, and lifecycle status."
         actions={
           <RequirePermission permission="item.create">
             <Button variant="primary" onClick={() => navigate("/items/new")}>

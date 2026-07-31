@@ -53,7 +53,10 @@ export default function StockExplorerPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="Stock Explorer" />
+      <PageHeader
+        title="Stock Explorer"
+        description="Current stock, FEFO ageing, and Excess %/Run Outs for any branch and item."
+      />
       <div className="flex flex-wrap items-end gap-3 border-b border-border px-4 py-3">
         <Field label="Branch" htmlFor="loc">
           <Select

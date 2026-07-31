@@ -60,7 +60,10 @@ export default function ReceivingPage() {
 
   return (
     <div className="mx-auto max-w-2xl p-4">
-      <PageHeader title="Receiving" />
+      <PageHeader
+        title="Receiving"
+        description="Record a delivery — one or more items received at a branch."
+      />
 
       <form
         onSubmit={(e) => {

@@ -52,7 +52,10 @@ export default function WastePage() {
 
   return (
     <div className="mx-auto max-w-lg p-4">
-      <PageHeader title="Waste Log" />
+      <PageHeader
+        title="Waste Log"
+        description="Record spoiled, expired, or damaged stock with a reason."
+      />
 
       <form
         onSubmit={(e) => {

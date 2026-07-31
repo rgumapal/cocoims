@@ -57,7 +57,10 @@ export default function SalesPage() {
 
   return (
     <div className="mx-auto max-w-2xl p-4">
-      <PageHeader title="Sales" />
+      <PageHeader
+        title="Sales"
+        description="Record what sold today, and flag any item that ran out."
+      />
 
       <form
         onSubmit={(e) => {

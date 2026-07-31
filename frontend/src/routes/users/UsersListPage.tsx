@@ -43,7 +43,10 @@ export default function UsersListPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="Users & Roles" />
+      <PageHeader
+        title="Users & Roles"
+        description="Manage accounts, roles, and branch access."
+      />
       <div className="flex-1 overflow-hidden">
         <DataTable
           data={users ?? []}

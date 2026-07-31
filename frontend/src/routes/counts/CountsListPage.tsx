@@ -65,6 +65,7 @@ export default function CountsListPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Counts"
+        description="Open, submit, and approve physical stock counts."
         actions={
           <Button variant="primary" onClick={() => setShowDialog(true)}>
             Open Count
