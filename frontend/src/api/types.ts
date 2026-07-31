@@ -235,3 +235,39 @@ export interface CountSession {
 export interface CountSessionDetail extends CountSession {
   lines: CountLine[];
 }
+
+// ---------------------------------------------------------------------
+// users & roles
+// ---------------------------------------------------------------------
+export interface User {
+  user_id: number;
+  email: string;
+  full_name: string;
+  is_active: boolean;
+  is_service: boolean;
+  last_login_at: string | null;
+  role_hint: string | null;
+}
+
+export interface UserRoleGrant {
+  role_code: string;
+  granted_at: string | null;
+}
+
+export interface UserScopeGrant {
+  scope_id: number;
+  scope_type: string;
+  scope_value: string;
+}
+
+export interface UserDetail extends User {
+  roles: UserRoleGrant[];
+  scopes: UserScopeGrant[];
+}
+
+export interface Role {
+  role_code: string;
+  label: string;
+  description: string | null;
+  is_system: boolean;
+}

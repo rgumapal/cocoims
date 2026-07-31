@@ -1,8 +1,16 @@
+/* @import must be the first rule in the file — CSS spec requires it, and
+   browsers silently drop an @import that comes after other rules. It was
+   below @tailwind here originally and tokens.css was never actually
+   loading as a result (confirmed live: --bg resolved to an empty string,
+   body fell back to a transparent background, and what looked like a
+   working dark theme was actually Chrome's own auto-dark-mode heuristic
+   on an unstyled page, not this app's CSS — toggling the theme did nothing
+   because there was no real theme applied to begin with). */
+@import "./design/tokens.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import "./design/tokens.css";
 
 @layer base {
   html {
