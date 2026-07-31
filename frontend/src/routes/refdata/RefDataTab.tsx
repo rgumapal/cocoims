@@ -5,6 +5,7 @@ import { RequirePermission } from "@/auth/RequireAuth";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Field";
+import { useOptimisticMutation } from "@/hooks/useOptimisticMutation";
 
 /** One field's shape in a ref-data table's create form. */
 interface FieldConfig {
@@ -52,16 +53,29 @@ export function RefDataTab({ resourcePath, pkField, pkLabel, fields }: RefDataTa
     onError: (err) => setError(err instanceof Error ? err.message : "Could not create"),
   });
 
-  const deactivateMutation = useMutation({
+  // SPEC §12.6 rule 7: "Optimistic UI with clear rollback." The row flips
+  // to Inactive the instant you click, before the server responds; if the
+  // request fails, useOptimisticMutation restores the previous row and
+  // `deactivateError` below is what makes that rollback visible rather
+  // than a silent revert the user might not even notice.
+  const {
+    mutate: deactivate,
+    error: deactivateError,
+  } = useOptimisticMutation<RefRow, string, RefRow[]>({
     // The backend route is POST, not PATCH (app/api/v1/refdata.py's
     // register_code_table_crud registers deactivate as @router.post) —
-    // confirmed live: PATCH returned 405 before this fix.
-    mutationFn: (code: string) => apiPost<RefRow>(`/api/v1/${resourcePath}/${code}/deactivate`),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["refdata", resourcePath] }),
+    // confirmed live: PATCH returned 405 before that fix.
+    mutationFn: (code) => apiPost<RefRow>(`/api/v1/${resourcePath}/${code}/deactivate`),
+    queryKey: ["refdata", resourcePath],
+    applyOptimistic: (old, code) =>
+      (old ?? []).map((row) => (row[pkField] === code ? { ...row, is_active: false } : row)),
   });
 
   return (
     <div className="p-4">
+      {deactivateError && (
+        <p className="mb-3 font-ui text-small text-negative">{deactivateError}</p>
+      )}
       <table className="mb-6 w-full border-collapse">
         <thead>
           <tr className="border-b border-border">
@@ -114,7 +128,7 @@ export function RefDataTab({ resourcePath, pkField, pkLabel, fields }: RefDataTa
                   {row.is_active ? (
                     <button
                       type="button"
-                      onClick={() => deactivateMutation.mutate(String(row[pkField]))}
+                      onClick={() => deactivate(String(row[pkField]))}
                       className="font-ui text-small text-negative hover:underline"
                     >
                       Deactivate
