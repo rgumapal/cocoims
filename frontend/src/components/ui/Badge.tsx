@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 type BadgeTone = "neutral" | "positive" | "attention" | "negative";
 
 const TONE_CLASSES: Record<BadgeTone, string> = {
@@ -10,7 +12,7 @@ const TONE_CLASSES: Record<BadgeTone, string> = {
 // SPEC §12.8: "never colour alone to convey state — pair with icon or
 // label." A Badge is always text, never a bare colored dot, so this rule
 // holds by construction rather than by discipline at each call site.
-export function Badge({ tone = "neutral", children }: { tone?: BadgeTone; children: string }) {
+export function Badge({ tone = "neutral", children }: { tone?: BadgeTone; children: ReactNode }) {
   return (
     <span
       className={`inline-block rounded-sm px-1.5 py-0.5 font-ui text-micro font-medium uppercase tracking-[0.04em] ${TONE_CLASSES[tone]}`}

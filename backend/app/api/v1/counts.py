@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.api.v1.pagination import Page
 from app.auth.deps import get_db, require_permission
 from app.core.config import settings
 from app.domain.ledger import balance_as_of
@@ -73,6 +74,34 @@ def _get_session_or_404(session: Session, count_id: int) -> CountSession:
     if count_session is None:
         raise HTTPException(status_code=404, detail=f"Count session {count_id} not found")
     return count_session
+
+
+@router.get("", response_model=Page[CountSessionOut])
+def list_counts(
+    session: Annotated[Session, Depends(get_db)],
+    _: Annotated[AppUser, Depends(require_permission("count.submit"))],
+    location: str | None = None,
+    status: str | None = None,
+    cursor: str | None = None,
+    limit: int = 50,
+) -> Page[CountSessionOut]:
+    """Newest first. RLS scopes `location` automatically — a Store Head
+    only ever sees sessions for their own branch, same as every other
+    scoped list endpoint (SPEC §7.4).
+    """
+    stmt = select(CountSession).order_by(CountSession.count_id.desc())
+    if location:
+        stmt = stmt.where(CountSession.location_code == location)
+    if status:
+        stmt = stmt.where(CountSession.status == status)
+    if cursor:
+        stmt = stmt.where(CountSession.count_id < int(cursor))
+
+    rows = session.execute(stmt.limit(limit + 1)).scalars().all()
+    next_cursor = str(rows[limit - 1].count_id) if len(rows) > limit else None
+    return Page(
+        items=[CountSessionOut.model_validate(r) for r in rows[:limit]], next_cursor=next_cursor
+    )
 
 
 @router.post("", response_model=CountSessionOut, status_code=201)
