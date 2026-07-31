@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.pagination import Page
 from app.auth.deps import get_db, require_permission
-from app.domain.ledger import balance_as_of, fefo_ageing, write_movement
+from app.domain.ledger import balance_as_of, excess_summary, fefo_ageing, write_movement
 from app.models import AppUser, StockMovement
 
 router = APIRouter(prefix="/api/v1/stock", tags=["stock"])
@@ -34,6 +34,15 @@ class StockBalanceOut(BaseModel):
     as_of_date: dt.date
     balance_qty: Decimal
     fefo_buckets: list[FefoBucketOut]
+    # Excess/Run Outs (SPEC §1 glossary), computed live from stock_movement
+    # — see app.domain.ledger.excess_summary's docstring for why this is
+    # all-time-to-date rather than a rolling window, and why excess_qty is
+    # not floored at zero.
+    deliveries_qty: Decimal
+    sales_qty: Decimal
+    excess_qty: Decimal
+    excess_pct: Decimal | None
+    sold_out_dates: list[dt.date]
 
 
 class StockMovementOut(BaseModel):
@@ -87,12 +96,18 @@ def get_stock_balance(
     as_of_date = as_of or dt.date.today()
     balance = balance_as_of(session, location, item, as_of_date)
     buckets = fefo_ageing(session, location, item, as_of_date)
+    excess = excess_summary(session, location, item, as_of_date)
     return StockBalanceOut(
         location_code=location,
         item_code=item,
         as_of_date=as_of_date,
         balance_qty=balance,
         fefo_buckets=[FefoBucketOut(**b._asdict()) for b in buckets],
+        deliveries_qty=excess.deliveries_qty,
+        sales_qty=excess.sales_qty,
+        excess_qty=excess.excess_qty,
+        excess_pct=excess.excess_pct,
+        sold_out_dates=excess.sold_out_dates,
     )
 
 

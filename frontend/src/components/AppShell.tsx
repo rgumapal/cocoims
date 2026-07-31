@@ -18,6 +18,7 @@ const NAV_LINKS = [
   { to: "/stock", label: "Stock Explorer" },
   { to: "/counts", label: "Counts" },
   { to: "/receiving", label: "Receiving" },
+  { to: "/sales", label: "Sales" },
   { to: "/waste", label: "Waste Log" },
   // SYS_ADMIN only (SPEC §7.3's seeded matrix) — hidden rather than shown
   // and 403'd, since a nav link to a screen you can't use is exactly the

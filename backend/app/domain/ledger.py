@@ -20,7 +20,7 @@ from typing import NamedTuple
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import StockMovement
+from app.models import SoldOutEvent, StockMovement
 
 # SPEC §4.4: "qty signed: +in, -out". COUNT_ADJUSTMENT is deliberately
 # excluded from both sets — a cycle count can correct a balance in either
@@ -35,6 +35,14 @@ class FefoBucket(NamedTuple):
     expiry_date: dt.date | None
     remaining_qty: Decimal
     days_remaining: int | None  # None if expiry_date was never stamped on any movement in the batch
+
+
+class ExcessSummary(NamedTuple):
+    deliveries_qty: Decimal  # Σ RECEIPT, all-time through as_of_date
+    sales_qty: Decimal  # Σ |SALE|, all-time through as_of_date (positive magnitude)
+    excess_qty: Decimal  # deliveries_qty - sales_qty; NOT floored at zero — see excess_summary
+    excess_pct: Decimal | None  # None (not 0) when deliveries_qty is 0 — the ratio is undefined
+    sold_out_dates: list[dt.date]
 
 
 def balance_as_of(
@@ -100,6 +108,67 @@ def fefo_ageing(
         )
         for row in rows
     ]
+
+
+def excess_summary(
+    session: Session, location_code: str, item_code: str, as_of_date: dt.date
+) -> ExcessSummary:
+    """Stock Explorer's Excess %% and Run Outs — SPEC's own glossary terms
+    (Excess = "delivered but unsold"). Computed directly from
+    core.stock_movement, all-time through as_of_date, the same way
+    balance_as_of is: no rolling window is invented here, and there's no
+    rpt.fact_daily_store_item rollup job yet for this to read from instead
+    (see the project memory on this requirement — the rollup is deferred,
+    this computes live).
+
+    excess_qty is deliveries_qty - sales_qty, NOT floored at zero: on a
+    system this new, sales frequently draw down opening stock that was
+    never itself recorded as a RECEIPT, which makes the raw difference
+    negative. Clamping that to zero would hide exactly the kind of gap
+    CLAUDE.md's "never coerce NULL to 0" spirit warns against — a negative
+    number here is a real, informative fact (recorded sales exceed recorded
+    deliveries), not noise to suppress.
+    """
+    deliveries_qty = session.execute(
+        select(func.coalesce(func.sum(StockMovement.qty), 0)).where(
+            StockMovement.location_code == location_code,
+            StockMovement.item_code == item_code,
+            StockMovement.movement_type == "RECEIPT",
+            StockMovement.business_date <= as_of_date,
+        )
+    ).scalar_one()
+
+    sales_qty_signed = session.execute(
+        select(func.coalesce(func.sum(StockMovement.qty), 0)).where(
+            StockMovement.location_code == location_code,
+            StockMovement.item_code == item_code,
+            StockMovement.movement_type == "SALE",
+            StockMovement.business_date <= as_of_date,
+        )
+    ).scalar_one()
+
+    sold_out_dates = session.execute(
+        select(SoldOutEvent.business_date)
+        .where(
+            SoldOutEvent.location_code == location_code,
+            SoldOutEvent.item_code == item_code,
+            SoldOutEvent.business_date <= as_of_date,
+        )
+        .order_by(SoldOutEvent.business_date.desc())
+    ).scalars().all()
+
+    deliveries = Decimal(deliveries_qty)
+    sales = -Decimal(sales_qty_signed)  # SALE is stored negative; report the positive magnitude
+    excess = deliveries - sales
+    excess_pct = (excess / deliveries) if deliveries > 0 else None
+
+    return ExcessSummary(
+        deliveries_qty=deliveries,
+        sales_qty=sales,
+        excess_qty=excess,
+        excess_pct=excess_pct,
+        sold_out_dates=list(sold_out_dates),
+    )
 
 
 def write_movement(

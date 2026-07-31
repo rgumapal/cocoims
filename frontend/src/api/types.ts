@@ -180,6 +180,14 @@ export interface StockBalance {
   as_of_date: string;
   balance_qty: string;
   fefo_buckets: FefoBucket[];
+  // Excess/Run Outs (SPEC §1 glossary) — computed live from stock_movement,
+  // all-time through as_of_date. excess_pct is null (not 0) when no
+  // deliveries have been recorded — the ratio is undefined, not zero.
+  deliveries_qty: string;
+  sales_qty: string;
+  excess_qty: string;
+  excess_pct: string | null;
+  sold_out_dates: string[];
 }
 
 export interface StockMovement {

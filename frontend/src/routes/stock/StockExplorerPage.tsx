@@ -93,12 +93,43 @@ export default function StockExplorerPage() {
         </div>
       ) : (
         <div className="flex-1 overflow-auto p-4">
-          <div className="mb-6 flex items-baseline gap-3">
-            <span className="font-ui text-small text-text-2">Balance as of today</span>
-            <span className="font-data text-display tabular-nums text-text">
-              {balanceLoading ? "…" : (balance?.balance_qty ?? "0")}
-            </span>
+          <div className="mb-6 flex flex-wrap items-baseline gap-x-8 gap-y-3">
+            <div className="flex items-baseline gap-3">
+              <span className="font-ui text-small text-text-2">Balance as of today</span>
+              <span className="font-data text-display tabular-nums text-text">
+                {balanceLoading ? "…" : (balance?.balance_qty ?? "0")}
+              </span>
+            </div>
+            <div className="flex items-baseline gap-3">
+              <span className="font-ui text-small text-text-2">Excess %</span>
+              <span className="font-data text-h1 tabular-nums text-text">
+                {balanceLoading
+                  ? "…"
+                  : balance?.excess_pct == null
+                    ? "—"
+                    : `${(Number(balance.excess_pct) * 100).toFixed(1)}%`}
+              </span>
+            </div>
+            <div className="flex items-baseline gap-3">
+              <span className="font-ui text-small text-text-2">Run outs (last 5)</span>
+              {!balanceLoading && (balance?.sold_out_dates.length ?? 0) === 0 ? (
+                <Badge tone="positive">None recorded</Badge>
+              ) : (
+                <div className="flex flex-wrap gap-1">
+                  {balance?.sold_out_dates.slice(0, 5).map((d) => (
+                    <Badge key={d} tone="attention">
+                      {d}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
+
+          <p className="mb-6 font-ui text-small text-text-3">
+            Deliveries {balance?.deliveries_qty ?? "0"} · Sales {balance?.sales_qty ?? "0"} ·
+            Excess (deliveries − sales) {balance?.excess_qty ?? "0"} — all-time to date.
+          </p>
 
           <h2 className="mb-2 font-ui text-h2 text-text">FEFO ageing</h2>
           <FefoTable buckets={balance?.fefo_buckets ?? []} />

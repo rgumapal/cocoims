@@ -54,3 +54,19 @@ def test_cx_specialist_cannot_manage_refdata(client: TestClient) -> None:
         "/api/v1/clusters", headers=headers, json={"cluster_code": "PYTEST_DENY", "label": "x"}
     )
     assert response.status_code == 403
+
+
+def test_cx_specialist_cannot_record_sales(client: TestClient) -> None:
+    """sales.record (migration 0010) is SYS_ADMIN/OPS_MANAGER/STORE_HEAD/
+    STORE_TEAM only, mirroring waste.record — CX_SPECIALIST holds neither."""
+    headers = auth_headers(client, "cx.lead@cocopan.ph")
+    response = client.post(
+        "/api/v1/sales",
+        headers=headers,
+        json={
+            "business_date": "2026-07-31",
+            "location_code": "CMSY-01",
+            "lines": [{"item_code": "CP001", "qty": "1"}],
+        },
+    )
+    assert response.status_code == 403

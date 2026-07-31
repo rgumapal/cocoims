@@ -91,3 +91,21 @@ class CountLine(Base):
 
     variance_reason: Mapped[str | None]
     was_counted: Mapped[bool] = mapped_column(default=False)
+
+
+class SoldOutEvent(Base):
+    """One row per (business_date, location, item) the branch ran out —
+    added by migration 0010 as the signal the Run Outs metric needs. A fact
+    about the day, not a quantity, so it lives outside stock_movement (see
+    that migration's docstring for why)."""
+
+    __tablename__ = "sold_out_event"
+    __table_args__ = {"schema": "core"}
+
+    business_date: Mapped[dt.date] = mapped_column(primary_key=True)
+    location_code: Mapped[str] = mapped_column(
+        ForeignKey("core.location.location_code"), primary_key=True
+    )
+    item_code: Mapped[str] = mapped_column(ForeignKey("core.item.item_code"), primary_key=True)
+    created_by: Mapped[int | None]
+    created_at: Mapped[dt.datetime | None] = mapped_column(server_default=func.now())

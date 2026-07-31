@@ -23,7 +23,7 @@ from app.models.identity import (
     UserRole,
     UserScope,
 )
-from app.models.ledger import CountLine, CountSession, StockMovement
+from app.models.ledger import CountLine, CountSession, SoldOutEvent, StockMovement
 from app.models.location import (
     Area,
     Cluster,
@@ -53,6 +53,7 @@ __all__ = [
     "UserScope",
     "CountLine",
     "CountSession",
+    "SoldOutEvent",
     "StockMovement",
     "Area",
     "Cluster",
