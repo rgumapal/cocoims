@@ -24,5 +24,12 @@ class Settings(BaseSettings):
     jwt_access_token_minutes: int = 30
     jwt_refresh_token_days: int = 14
 
+    # SPEC §7.4 separation of duties: a count variance beyond this magnitude
+    # cannot be approved by the user who submitted it. A flat constant for
+    # now — a real per-item/location threshold belongs in core.param_set,
+    # which is forecast/ladder-phase work (deferred, see the approved plan);
+    # nothing here invents that structure early.
+    count_variance_approval_threshold: int = 20
+
 
 settings = Settings()

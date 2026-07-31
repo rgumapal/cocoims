@@ -31,6 +31,7 @@ class ItemCategory(Base):
     parent_code: Mapped[str | None] = mapped_column(ForeignKey("core.item_category.category_code"))
     label: Mapped[str]
     sort_order: Mapped[int] = mapped_column(SmallInteger, default=0)
+    is_active: Mapped[bool] = mapped_column(default=True)  # added by migration 0006
 
 
 class Uom(Base):
@@ -40,6 +41,7 @@ class Uom(Base):
     uom_code: Mapped[str] = mapped_column(primary_key=True)
     label: Mapped[str]
     is_fractional: Mapped[bool] = mapped_column(default=False)
+    is_active: Mapped[bool] = mapped_column(default=True)  # added by migration 0006
 
 
 class ReasonCode(Base):

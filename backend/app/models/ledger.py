@@ -61,6 +61,8 @@ class CountSession(Base):
     started_at: Mapped[dt.datetime | None]
     submitted_at: Mapped[dt.datetime | None]
     submitted_by: Mapped[int | None]
+    approved_at: Mapped[dt.datetime | None]  # added by migration 0007
+    approved_by: Mapped[int | None]  # added by migration 0007
     status: Mapped[str] = mapped_column(default="OPEN")
 
 

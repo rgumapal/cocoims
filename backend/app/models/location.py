@@ -22,6 +22,7 @@ class Area(Base):
 
     area_code: Mapped[str] = mapped_column(primary_key=True)
     label: Mapped[str]
+    is_active: Mapped[bool] = mapped_column(default=True)  # added by migration 0006
 
 
 class Cluster(Base):
@@ -34,6 +35,7 @@ class Cluster(Base):
     cluster_code: Mapped[str] = mapped_column(primary_key=True)
     label: Mapped[str]
     description: Mapped[str | None] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(default=True)  # added by migration 0006
 
 
 class Route(Base):
@@ -43,6 +45,7 @@ class Route(Base):
     route_code: Mapped[str] = mapped_column(primary_key=True)
     label: Mapped[str]
     dispatch_sequence: Mapped[int | None] = mapped_column(SmallInteger)
+    is_active: Mapped[bool] = mapped_column(default=True)  # added by migration 0006
 
 
 class Geography(Base):

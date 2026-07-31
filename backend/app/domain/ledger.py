@@ -172,5 +172,13 @@ def write_movement(
         created_by=created_by,
     )
     session.add(movement)
-    session.flush()  # populate movement_id/occurred_at/created_at for the caller
+    session.flush()
+    # NUMERIC(12,3)/(12,4) columns are stored at a fixed scale regardless of
+    # how many decimal places the caller's Decimal happened to carry (e.g.
+    # qty=Decimal("6") in, Decimal("6.000") stored) — SQLAlchemy does not
+    # refresh a plain column after flush just because the DB reformatted it,
+    # so without this the object in memory (and therefore the API response)
+    # would echo back the caller's unpadded input instead of what was
+    # actually persisted.
+    session.refresh(movement)
     return movement
