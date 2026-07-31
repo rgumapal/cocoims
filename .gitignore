@@ -1,0 +1,16 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+node_modules/
+dist/
+.DS_Store
+
+# Client-supplied source data (email attachments, workbooks) — never committed
+files/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/

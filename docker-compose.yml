@@ -1,0 +1,30 @@
+services:
+  cocoims-db:
+    image: postgres:16
+    container_name: cocoims-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cocoims}
+      POSTGRES_USER: ${POSTGRES_USER:-cocoims}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cocoims_dev_local_only}
+    ports:
+      # 5432 is already bound by another project's container on this machine,
+      # so cocoims-db is published on 5433 (see .env DATABASE_URL).
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      - cocoims_pgdata:/var/lib/postgresql/data
+      # Postgres's entrypoint globs *top-level* files in this directory (it
+      # does not recurse into subdirectories), running each *.sql in name
+      # order, on first init only (i.e. only when the data volume is empty).
+      # Mirrors what Alembic's baseline migration applies on any other
+      # environment.
+      - ./db/ddl/001_schema.sql:/docker-entrypoint-initdb.d/10_schema.sql:ro
+      - ./db/seed/001_seed.sql:/docker-entrypoint-initdb.d/20_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cocoims} -d ${POSTGRES_DB:-cocoims}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  cocoims_pgdata:
