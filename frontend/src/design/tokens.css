@@ -1,0 +1,109 @@
+/* Design tokens — SPEC §12.2, copied verbatim. Two layers: fixed
+ * primitives (theme-independent), then semantic tokens that flip per
+ * theme. Components reference semantic tokens only (via Tailwind classes
+ * configured in tailwind.config.js) — never a primitive, never a raw hex
+ * value, anywhere outside this file. See CLAUDE.md DESIGN.
+ */
+
+/* ---------- primitives (theme-independent) ---------- */
+:root {
+  --gold-400: #f7c64b;
+  --gold-500: #f2b01e;
+  --gold-600: #d4970f;
+  --gold-700: #a87604;
+  --bark-500: #7a4e2d;
+  --bark-600: #5c3a20;
+
+  /* Near-neutral greys with a barely-there warm cast, so the palette
+     relates to the brand without reading as brown. */
+  --n-0: #ffffff;
+  --n-25: #fafaf9;
+  --n-50: #f5f4f2;
+  --n-100: #ebeae7;
+  --n-200: #dcdad6;
+  --n-300: #c2bfb9;
+  --n-400: #9c9891;
+  --n-500: #78746d;
+  --n-600: #5a5751;
+  --n-700: #403d39;
+  --n-800: #2b2926;
+  --n-900: #1c1b19;
+  --n-950: #131211;
+
+  --green-500: #16785f;
+  --green-400: #2e9b7e;
+  --blue-500: #2563a8;
+  --blue-400: #4a8bd1;
+  --red-500: #b3261e;
+  --red-400: #e0574e;
+
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-6: 24px;
+  --s-8: 32px;
+}
+
+/* ---------- light ---------- */
+[data-theme="light"] {
+  --bg: var(--n-25);
+  --surface: var(--n-0);
+  --surface-2: var(--n-50); /* table header, zebra */
+  --surface-hover: var(--n-100);
+  --border: var(--n-200);
+  --border-strong: var(--n-300);
+
+  --text: var(--n-900);
+  --text-2: var(--n-600);
+  --text-3: var(--n-400);
+  --text-invert: var(--n-0);
+
+  --accent: var(--gold-500);
+  --accent-hover: var(--gold-600);
+  --accent-fg: var(--n-900); /* text ON gold — never white */
+  --accent-subtle: #fdf3da;
+
+  --positive: var(--green-500);
+  --attention: var(--blue-500);
+  --negative: var(--red-500);
+  --positive-bg: #e6f2ee;
+  --attention-bg: #e7eff8;
+  --negative-bg: #fbe9e8;
+
+  --shadow-1: 0 1px 2px rgba(28, 27, 25, 0.06);
+  --shadow-2: 0 4px 12px rgba(28, 27, 25, 0.1);
+}
+
+/* ---------- dark ---------- */
+[data-theme="dark"] {
+  --bg: var(--n-950);
+  --surface: var(--n-900);
+  --surface-2: var(--n-800);
+  --surface-hover: var(--n-700);
+  --border: #2f2d2a;
+  --border-strong: #423f3b;
+
+  --text: var(--n-50);
+  --text-2: var(--n-300);
+  --text-3: var(--n-400);
+  --text-invert: var(--n-900);
+
+  --accent: var(--gold-500);
+  --accent-hover: var(--gold-400);
+  --accent-fg: var(--n-950);
+  --accent-subtle: #3a2e12;
+
+  --positive: var(--green-400);
+  --attention: var(--blue-400);
+  --negative: var(--red-400);
+  --positive-bg: #12312a;
+  --attention-bg: #16283a;
+  --negative-bg: #38201e;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
