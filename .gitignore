@@ -16,3 +16,6 @@ files/
 .ruff_cache/
 *.egg-info/
 *.tsbuildinfo
+
+# Local Cloud SQL Auth Proxy logs (see CLAUDE.md's "Local development database")
+cloud-sql-proxy*.log

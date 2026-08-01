@@ -1,3 +1,9 @@
+# Optional/fallback only — day-to-day local dev connects directly to Cloud
+# SQL via the Cloud SQL Auth Proxy (see .env and CLAUDE.md's "Local
+# development database" section) now that this is a single-database
+# prototype with no live client data to protect from local traffic. Spin
+# this up only when you deliberately want an isolated, disposable Postgres
+# to iterate on a risky migration before it touches the real thing.
 services:
   cocoims-db:
     image: postgres:16

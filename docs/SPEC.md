@@ -1,8 +1,13 @@
 # Cocopan Inventory Management System (CIMS)
 ## Complete System Specification
 
-**Version:** 3.1
-**Supersedes:** SPEC v3.0
+**Version:** 3.2
+**Supersedes:** SPEC v3.1
+**Changes in 3.2:** Added an implementation-status overview (§0) and a status
+note on §13's API surface, reflecting what's actually built (Firebase auth,
+dashboard, receiving/sales, Cloud Run deployment) vs. still spec-only
+(forecast, replenishment, accuracy, integration layer). Documents reality;
+no requirement changed.
 **Changes in 3.1:** DDL extracted to `db/` — §4, §6.2–6.4 and §7.2 now carry the
 rationale and point at the SQL that defines it, rather than duplicating it. The
 SQL is authoritative; where this document and `db/` disagree, this document is
@@ -18,6 +23,24 @@ the bug. No requirement changed.
 This is a build specification. Sections 1–2 are domain context — read them before writing code, because the business logic is non-obvious and the vocabulary must match the client's exactly. Sections 4–11 are the buildable core. Section 12 is the design system and is **binding**, not suggestive. Section 14 defines done.
 
 Rules marked **⚠️ CALIBRATE** are derived from the client's spreadsheet but the exact formula was not recoverable. Implement as configurable and fit against §14 AC-1.
+
+### Implementation status
+
+This spec describes the full intended system; the sections below are not
+all built yet. Check here before assuming a section is live — this table
+is maintained loosely (it will drift), `README.md`'s "What's actually built
+right now" is the more current source when the two disagree.
+
+| Section | Status |
+|---|---|
+| §4 Data model, §5 Branch/reference data | Built — full schema, RLS, RBAC. Onboarding wizard (§5.2) and assortment templates (§5.5) are not. |
+| §7 Roles and permissions | Built — API-layer permission checks + DB-layer RLS, per §7.4. |
+| §12 UX and design system | Built for every shipped screen (login, dashboard, items, branches, reference data, stock explorer, counts, receiving, sales, waste log, users & roles). |
+| §13 API surface | Partial — see the status note at the top of that section. |
+| §8 Forecast engine, §9 Replenishment engine, §10 Accuracy and bias | Not built. No calibration against §14 AC-1 has happened yet. |
+| §11 Integration layer | Not built. Manual entry (receiving/sales/waste screens) covers the ledger for now instead. |
+| Auth | Built, but not as specced in §7/§13: Firebase Auth (Google + email/password), admin-provisioned accounts only, not the bcrypt-only flow those sections describe. See CLAUDE.md's auth notes. |
+| Deployment | Not in this spec at all — both services run on Cloud Run behind `cims.rgsuite.net`. See the `deploy` skill (`.claude/skills/deploy/`). |
 
 ---
 
@@ -989,6 +1012,19 @@ WCAG 2.1 AA contrast **verified in both themes** — dark mode is not exempt and
 ---
 
 ## 13. API surface
+
+**Status (see §0's implementation-status table for the full picture):** the
+Master data / Users & access / Inventory groups below are built, with two
+real deviations worth knowing before you go looking for the spec'd shape —
+auth is Firebase-based in practice (`POST /api/v1/auth/firebase`; the
+`/auth/login` shown below is a dormant bcrypt fallback the frontend no
+longer calls, kept for admin/scripting use), and there's a `GET
+/api/v1/dashboard` endpoint not listed here at all (one permission-gated
+aggregate read per nav screen, powering the post-login landing page).
+Locations' onboarding wizard, assortment templates, `params`, and
+`geography` are not built. Replenishment / Analytics / Admin & integration
+/ Inbound integration are entirely spec-only — nothing in those four groups
+exists yet.
 
 ```
 POST   /api/v1/auth/login | refresh | logout
