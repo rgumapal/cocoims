@@ -85,6 +85,52 @@ Opens on `http://localhost:5173` (Vite's default) and proxies `/api/*` to
 the backend on port 8010 (see `frontend/vite.config.ts`) — the backend must
 already be running. Log in as `regie.gumapal@gmail.com` via Google, or
 create your own account through the app first (see the login note above).
+Copy `frontend/.env.example` to `frontend/.env` first — Vite reads Firebase
+config from there for local dev (values already work, see the file's own
+comment for why they're not secret).
+
+## Contributing
+
+### Access you'll need first
+
+There's no public sign-up and local dev connects to a single shared Cloud
+SQL instance (see CLAUDE.md's "Local development database" for why) — ask
+**regie.gumapal@gmail.com** (project owner) for:
+
+1. **GitHub collaborator access** on this repo.
+2. **GCP IAM**: `roles/cloudsql.client` on the `cocoims` project, at
+   minimum — that's what lets `gcloud auth application-default login` +
+   the Cloud SQL Auth Proxy reach the database from your machine.
+3. **An app account**: sign in isn't self-service. The owner creates your
+   user via **Users & Roles → New User** in the running app, which
+   auto-provisions a Firebase credential and hands back a one-time
+   password-setup link.
+
+### Branch, then merge when ready
+
+This repo doesn't push directly to `master` for feature work.
+
+```bash
+git checkout master && git pull
+git checkout -b <you>/<short-description>     # e.g. jane/counts-export-csv
+
+# ...commit as you go...
+
+git push -u origin <you>/<short-description>
+```
+
+Open a pull request on GitHub against `master`. There's no mandatory
+review gate for a team this size, but a PR is still worth it for the diff
+view and a paper trail — merge it yourself once you're confident it's
+right (regular merge, not squash, to keep individual commit messages —
+matches this repo's existing history). Delete the branch after merging
+(GitHub offers a one-click button on the merged PR).
+
+**Merging doesn't deploy anything.** Cloud Run keeps serving whatever was
+last pushed through the `deploy` skill, regardless of what's on `master` —
+deploying is a separate, explicit step. If two people might deploy around
+the same time, say so in the PR or coordinate directly first; deploying
+over someone else's in-flight testing is the main way this bites.
 
 ## What's actually built right now
 
