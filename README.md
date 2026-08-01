@@ -8,7 +8,13 @@ to. This file is just the "get it running" quickstart.
 
 - [gcloud CLI](https://cloud.google.com/sdk/docs/install), authenticated
   (`gcloud auth login` + `gcloud auth application-default login`) with
-  access to the `cocoims` GCP project
+  access to the `cocoims` GCP project — specifically `roles/cloudsql.client`
+  (Cloud SQL Auth Proxy connectivity) **and** `roles/secretmanager.secretAccessor`
+  (to pull the real DB passwords in step 1 below). Ask the project owner
+  (`regie.gumapal@gmail.com`) to grant both — neither is on by default for a
+  new IAM member, and without `secretAccessor` specifically, step 1's
+  command below fails with a permission error that looks unrelated to
+  "I can't log in."
 - [Cloud SQL Auth Proxy](https://cloud.google.com/sql/docs/postgres/connect-auth-proxy) —
   dev DB connectivity
 - Python 3.12+
@@ -21,8 +27,17 @@ to. This file is just the "get it running" quickstart.
 ```bash
 # 1. Environment
 cp .env.example .env
-# fill in the real Cloud SQL passwords (ask a teammate / check Secret
-# Manager — never commit real values)
+# Pull the real Cloud SQL passwords from Secret Manager (requires
+# secretmanager.secretAccessor, above):
+gcloud secrets versions access latest --secret=cocoims-database-url --project=cocoims
+gcloud secrets versions access latest --secret=cocoims-app-database-url --project=cocoims
+# Each prints postgresql+psycopg2://<user>:<password>@/cocoims?host=/cloudsql/...
+# — that host= form is Cloud Run's Unix-socket shape, NOT what local dev
+# uses. Take only the username:password from each and rebuild the URL
+# against the Auth Proxy instead:
+#   DATABASE_URL=postgresql+psycopg2://cocoims:<password>@127.0.0.1:5433/cocoims
+#   APP_DATABASE_URL=postgresql+psycopg2://cocoims_app:<password>@127.0.0.1:5433/cocoims
+# Paste those two lines into .env. Never commit the real values.
 
 # 2. Database — Cloud SQL (cocoims:asia-southeast1:cocoims-db) via the
 #    Cloud SQL Auth Proxy, not a local container. This is a prototype with
@@ -49,10 +64,14 @@ alembic upgrade head
 python -m scripts.set_dev_passwords
 
 # 6. Run the API
-#    Port 8000 is the FastAPI/uvicorn convention, but collides with an
-#    unrelated project on at least one dev machine this has been built on
-#    — 8010 is what's actually been used and tested throughout. Either
-#    works; the frontend's Vite proxy (frontend/vite.config.ts) assumes 8010.
+#    --port 8010 is REQUIRED, not a suggestion: the frontend's Vite proxy
+#    (frontend/vite.config.ts) is hardcoded to http://127.0.0.1:8010 and
+#    doesn't fall back to anything else. Omit this flag and uvicorn
+#    silently starts on its own default (8000) instead — the backend looks
+#    "up" (curl :8000/health works fine) but the frontend can't reach it
+#    and every API call from the UI fails. 8000 was avoided in the first
+#    place because it collides with an unrelated project on at least one
+#    dev machine this has been built on.
 uvicorn app.main:app --reload --port 8010
 ```
 
@@ -103,9 +122,12 @@ SQL instance (see CLAUDE.md's "Local development database" for why) — ask
 **regie.gumapal@gmail.com** (project owner) for:
 
 1. **GitHub collaborator access** on this repo.
-2. **GCP IAM**: `roles/cloudsql.client` on the `cocoims` project, at
-   minimum — that's what lets `gcloud auth application-default login` +
-   the Cloud SQL Auth Proxy reach the database from your machine.
+2. **GCP IAM**: `roles/cloudsql.client` (lets the Cloud SQL Auth Proxy reach
+   the database from your machine) **and** `roles/secretmanager.secretAccessor`
+   (lets you pull the real DB passwords for step 1 of the Quickstart —
+   without it that step fails with a permission error). Both are required;
+   `cloudsql.client` alone gets you a proxy that can't authenticate to
+   anything.
 3. **An app account**: sign in isn't self-service. The owner creates your
    user via **Users & Roles → New User** in the running app, which
    auto-provisions a Firebase credential and hands back a one-time
