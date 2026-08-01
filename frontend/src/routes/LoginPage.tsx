@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { signInWithGoogle } from "@/auth/firebase";
-import { Button } from "@/components/ui/Button";
 import { GoogleIcon } from "@/components/icons";
 
 // Email+password sign-in (signInWithEmailPassword in auth/firebase.ts,
@@ -38,25 +37,30 @@ export default function LoginPage() {
 
   return (
     <div className="flex h-screen items-center justify-center bg-bg p-4">
-      <div className="w-full max-w-sm rounded-lg border border-border bg-surface p-6 shadow-2">
+      {/* Fixed brand colors, not theme-following surface/text tokens — same
+          treatment as the app shell's header (see AppShell.tsx), since this
+          is brand chrome, not content. */}
+      <div className="w-full max-w-sm rounded-lg bg-header-bg p-6 shadow-2">
         <div className="mb-6 flex items-center gap-2">
-          <span className="h-3 w-3 rounded-sm bg-accent" aria-hidden="true" />
-          <span className="font-ui text-h1 text-text">Cocopan IMS</span>
+          <span className="h-3 w-3 rounded-sm bg-header-fg" aria-hidden="true" />
+          <span className="font-ui text-h1 text-header-fg">Cocopan IMS</span>
         </div>
 
         <div className="flex flex-col gap-4">
           {error && <p className="font-ui text-small text-negative">{error}</p>}
 
-          <Button
+          {/* White background is Google's own sign-in button branding, not
+              this app's token system — same deliberate exception as
+              GoogleIcon's brand colors. */}
+          <button
             type="button"
-            variant="primary"
             onClick={() => void handleGoogleSignIn()}
             disabled={isGoogleSubmitting}
-            className="flex w-full items-center justify-center gap-2"
+            className="flex w-full items-center justify-center gap-2 rounded-md bg-white px-3 py-1.5 font-ui text-body font-medium text-[#1c1b19] transition-colors duration-theme hover:bg-[#f5f4f2] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <GoogleIcon />
             {isGoogleSubmitting ? "Signing in…" : "Sign in with Google"}
-          </Button>
+          </button>
         </div>
       </div>
     </div>
