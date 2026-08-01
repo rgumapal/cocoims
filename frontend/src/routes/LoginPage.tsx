@@ -36,7 +36,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex h-screen items-center justify-center bg-bg p-4">
+    <div className="flex h-screen flex-col items-center justify-center gap-3 bg-bg p-4">
       {/* Fixed brand colors, not theme-following surface/text tokens — same
           treatment as the app shell's header (see AppShell.tsx), since this
           is brand chrome, not content. */}
@@ -47,8 +47,6 @@ export default function LoginPage() {
         </div>
 
         <div className="flex flex-col gap-4">
-          {error && <p className="font-ui text-small text-negative">{error}</p>}
-
           {/* White background is Google's own sign-in button branding, not
               this app's token system — same deliberate exception as
               GoogleIcon's brand colors. */}
@@ -59,10 +57,18 @@ export default function LoginPage() {
             className="flex w-full items-center justify-center gap-2 rounded-md bg-white px-3 py-1.5 font-ui text-body font-medium text-[#1c1b19] transition-colors duration-theme hover:bg-[#f5f4f2] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <GoogleIcon />
-            {isGoogleSubmitting ? "Signing in…" : "Sign in with Google"}
+            {isGoogleSubmitting ? "Signing in…" : "Sign in with Google or Other email"}
           </button>
         </div>
       </div>
+
+      {/* Outside the card, not inside it — an error here is about the
+          sign-in attempt, not part of the brand chrome above it. */}
+      {error && (
+        <div className="w-full max-w-sm rounded-md border border-negative bg-negative-bg px-3 py-2">
+          <p className="font-ui text-small text-negative">{error}</p>
+        </div>
+      )}
     </div>
   );
 }
