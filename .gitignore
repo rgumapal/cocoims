@@ -21,3 +21,6 @@ files/
 # "Local development database"
 cloud-sql-proxy*.log
 backend*.log
+
+# Per-run manifests written by scripts/seed_sample_data.py
+backend/.seed-runs/
