@@ -62,22 +62,28 @@ RECEIVING_ITEM_SHARE = (0.80, 1.00)
 RECEIVE_QTY = (5, 70)
 PRODUCTION_BACKDATE_MAX_DAYS = 5
 
-SALES_BRANCH_SHARE = (0.80, 1.00)
+SALES_BRANCH_SHARE = (0.95, 1.00)
 # Branches that sell without any recorded delivery — deliberate: it drives
 # balances negative, which is a real signal (recorded sales exceeding
 # recorded deliveries) that app.domain.ledger.excess_summary explicitly does
 # not floor at zero.
 SALES_UNRECEIVED_BRANCHES = (1, 2)
-SALES_ITEM_SHARE = (0.90, 1.00)
+SALES_ITEM_SHARE = (0.95, 1.00)
 SALES_EXTRA_ITEM_PROBABILITY = 0.10
 SALES_EXTRA_ITEMS = (1, 2)
 RAN_OUT_SHARE = (0.40, 0.60)
 # How far short of the delivered quantity a not-sold-out item lands.
-SALES_SHORTFALL = (1, 20)
-UNRECEIVED_SOLD_QTY = (50, 80)
+SALES_SHORTFALL = (1, 10)
+UNRECEIVED_SOLD_QTY = (5, 60)
 
-WASTE_BRANCH_SHARE = (0.70, 1.00)
-WASTE_ITEM_SHARE = (0.70, 1.00)
+# Every branch/item with stock left over (received - sold > 0, see
+# build_plan's waste_candidates/eligible filters below) gets wasted — not a
+# random subset. The share bands stay as (1.0, 1.0) rather than hardcoding
+# "all of them" at the call site so _share's plumbing (and the "always at
+# least 1" floor) stays the one code path for every share decision in this
+# file, per CLAUDE.md's "one obvious way to do each thing."
+WASTE_BRANCH_SHARE = (1.00, 1.00)
+WASTE_ITEM_SHARE = (1.00, 1.00)
 
 # Only reason codes whose requires_note is FALSE. The waste endpoint
 # (app.api.v1.waste.WasteRequest) has no note field at all, so a code that
