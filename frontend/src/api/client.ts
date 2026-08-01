@@ -4,6 +4,7 @@
 // queryFn/mutationFn goes through apiFetch below — so auth headers, 401
 // retry-once-after-refresh, and error shaping all live in one place.
 import { clearTokens, getAccessToken, refreshTokens } from "./auth";
+import { API_BASE_URL } from "./config";
 
 export class ApiError extends Error {
   constructor(
@@ -34,7 +35,7 @@ async function doFetch(path: string, init: RequestInit): Promise<Response> {
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  return fetch(path, { ...init, headers });
+  return fetch(`${API_BASE_URL}${path}`, { ...init, headers });
 }
 
 /** Typed fetch wrapper for every API call. On a 401 (expired access

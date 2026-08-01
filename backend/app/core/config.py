@@ -24,6 +24,22 @@ class Settings(BaseSettings):
     jwt_access_token_minutes: int = 30
     jwt_refresh_token_days: int = 14
 
+    # Google sign-in via Firebase (additive to email+password, SPEC §16
+    # open item #11) — fixes which Firebase project's ID tokens this app
+    # will accept, so verify_firebase_id_token can't be fooled by a token
+    # minted for an unrelated Firebase project.
+    firebase_project_id: str = "cocoims"
+
+    # Comma-separated. Same-origin locally (Vite's dev proxy in
+    # vite.config.ts), so the default only needs to cover the dev server
+    # itself; a deployed frontend on its own origin sets this via Cloud Run
+    # env vars to its real URL.
+    cors_allowed_origins: str = "http://localhost:5173"
+
+    @property
+    def cors_allowed_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_allowed_origins.split(",") if o.strip()]
+
     # SPEC §7.4 separation of duties: a count variance beyond this magnitude
     # cannot be approved by the user who submitted it. A flat constant for
     # now — a real per-item/location threshold belongs in core.param_set,

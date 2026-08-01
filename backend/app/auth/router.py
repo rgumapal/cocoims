@@ -5,11 +5,13 @@ import datetime as dt
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, text
+from firebase_admin.exceptions import FirebaseError
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.auth.deps import get_current_user, get_raw_session, resolve_effective_scope
-from app.auth.schemas import LoginRequest, MeResponse, RefreshRequest, TokenResponse
+from app.auth.deps import get_current_user, get_raw_session, get_user_permissions, resolve_effective_scope
+from app.auth.firebase import verify_firebase_id_token
+from app.auth.schemas import FirebaseLoginRequest, LoginRequest, MeResponse, RefreshRequest, TokenResponse
 from app.auth.security import create_token, decode_token, verify_password
 from app.core.config import settings
 from app.models import AppUser
@@ -47,6 +49,51 @@ def login(body: LoginRequest, session: Session = Depends(get_raw_session)) -> To
     if not user.is_active:
         raise HTTPException(status_code=401, detail="Account is inactive")
 
+    user.last_login_at = dt.datetime.now(dt.timezone.utc)
+    session.commit()
+
+    return _issue_pair(user.user_id)
+
+
+@router.post("/firebase", response_model=TokenResponse)
+def firebase_login(
+    body: FirebaseLoginRequest, session: Session = Depends(get_raw_session)
+) -> TokenResponse:
+    """Authenticate via Firebase — the one identity provider this app uses,
+    covering both Google sign-in and email+password (SPEC §16 open item
+    #11). The ID token's own claims say which provider was actually used;
+    this endpoint doesn't need to care which.
+
+    Verifies the ID token's signature against Google's own certs (never
+    trusted from the client as-is), then matches it to an *existing*
+    core.app_user by email. Deliberately never auto-creates an account on
+    first sign-in — provisioning stays an explicit admin action on the
+    Users screen (which also provisions the Firebase credential itself,
+    see app/auth/firebase.py's provision_firebase_credential), same as
+    every other account in this system (CLAUDE.md ACCESS: deny by default).
+
+    Requires: no permission — same bootstrapping role as /login.
+    """
+    try:
+        decoded = verify_firebase_id_token(body.id_token)
+    except (ValueError, FirebaseError) as exc:
+        raise HTTPException(status_code=401, detail="Invalid sign-in") from exc
+
+    email = decoded.get("email")
+    if not email or not decoded.get("email_verified"):
+        raise HTTPException(status_code=401, detail="Account has no verified email")
+
+    user = session.execute(select(AppUser).where(AppUser.email == email)).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=403,
+            detail="No Cocopan IMS account for this email — ask an admin to create one first",
+        )
+    if not user.is_active:
+        raise HTTPException(status_code=401, detail="Account is inactive")
+
+    if user.sso_subject is None:
+        user.sso_subject = decoded["uid"]
     user.last_login_at = dt.datetime.now(dt.timezone.utc)
     session.commit()
 
@@ -101,19 +148,7 @@ def me(
 
     Requires: a valid access token. No permission beyond being authenticated.
     """
-    permissions = sorted(
-        {
-            row[0]
-            for row in session.execute(
-                text(
-                    "SELECT DISTINCT rp.permission_code FROM core.user_role ur "
-                    "JOIN core.role_permission rp ON rp.role_code = ur.role_code "
-                    "WHERE ur.user_id = :uid"
-                ),
-                {"uid": user.user_id},
-            ).all()
-        }
-    )
+    permissions = sorted(get_user_permissions(session, user.user_id))
     unrestricted, location_scope = resolve_effective_scope(session, user.user_id)
 
     return MeResponse(

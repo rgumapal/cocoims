@@ -10,6 +10,7 @@ interface AuthContextValue {
   isLoggedIn: boolean;
   hasPermission: (code: string) => boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithFirebase: (idToken: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -44,6 +45,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await queryClient.invalidateQueries({ queryKey: ["me"] });
   }
 
+  async function loginWithFirebase(idToken: string): Promise<void> {
+    await authApi.loginWithFirebase(idToken);
+    setHasToken(true);
+    await queryClient.invalidateQueries({ queryKey: ["me"] });
+  }
+
   async function logout(): Promise<void> {
     await authApi.logout();
     setHasToken(false);
@@ -60,6 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoggedIn: meQuery.data !== undefined,
     hasPermission,
     login,
+    loginWithFirebase,
     logout,
   };
 

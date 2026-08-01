@@ -22,6 +22,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.auth.deps import get_db, require_permission
+from app.auth.firebase import provision_firebase_credential
 from app.models import AppUser, Role, UserRole, UserScope
 
 router = APIRouter(prefix="/api/v1", tags=["users"])
@@ -38,6 +39,17 @@ class UserOut(BaseModel):
     is_service: bool
     last_login_at: dt.datetime | None
     role_hint: str | None
+    # Held role codes and a human-readable summary of effective branch
+    # scope — surfaced on the list itself (not just the detail page) so
+    # "who can do what, where" is answerable without a click per row.
+    # Populated by _to_user_out below from an eager-loaded relationship,
+    # never lazy per-row (that would be exactly the N+1 CLAUDE.md forbids).
+    roles: list[str] = []
+    scope_summary: list[str] = []
+    # Only ever set on the create_user response — a one-time link the admin
+    # hands to the new user so they can set their own Firebase password.
+    # Never persisted, never returned by any other endpoint.
+    password_setup_link: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -45,12 +57,14 @@ class UserOut(BaseModel):
 class UserCreate(BaseModel):
     email: str
     full_name: str
+    role_hint: str | None = None
     is_active: bool = True
     is_service: bool = False
 
 
 class UserUpdate(BaseModel):
     full_name: str | None = None
+    role_hint: str | None = None
     is_active: bool | None = None
 
 
@@ -99,12 +113,39 @@ def _get_user_or_404(session: Session, user_id: int) -> AppUser:
     return user
 
 
+def _to_user_out(user: AppUser) -> UserOut:
+    """Flattens role codes and a human-readable scope summary onto the list
+    response, from relationships the caller has already eager-loaded (see
+    list_users' selectinload) — never a per-row query.
+    """
+    scope_summary = [
+        "All branches" if s.scope_type == "ALL" else f"{s.scope_type}: {s.scope_value}"
+        for s in user.scopes
+    ]
+    return UserOut(
+        user_id=user.user_id,
+        email=user.email,
+        full_name=user.full_name,
+        is_active=user.is_active,
+        is_service=user.is_service,
+        last_login_at=user.last_login_at,
+        role_hint=user.role_hint,
+        roles=[r.role_code for r in user.roles],
+        scope_summary=scope_summary,
+    )
+
+
 @router.get("/users", response_model=list[UserOut])
 def list_users(
     session: Annotated[Session, Depends(get_db)],
     _: Annotated[AppUser, Depends(require_permission(USER_MANAGE))],
-) -> list[AppUser]:
-    return list(session.execute(select(AppUser).order_by(AppUser.email)).scalars().all())
+) -> list[UserOut]:
+    users = session.execute(
+        select(AppUser)
+        .options(selectinload(AppUser.roles), selectinload(AppUser.scopes))
+        .order_by(AppUser.email)
+    ).scalars().all()
+    return [_to_user_out(u) for u in users]
 
 
 @router.post("/users", response_model=UserOut, status_code=201)
@@ -112,11 +153,13 @@ def create_user(
     body: UserCreate,
     session: Annotated[Session, Depends(get_db)],
     user: Annotated[AppUser, Depends(require_permission(USER_MANAGE))],
-) -> AppUser:
-    """Creates the identity only — no password. Every seeded account is
-    SSO-first (password_hash NULL); setting a local password is a separate,
-    deliberately manual step (see backend/scripts/set_dev_passwords.py's
-    docstring for why that script is dev-only).
+) -> UserOut:
+    """Creates the identity and, for an interactive (non-service) account,
+    its Firebase sign-in credential too — the single identity provider for
+    both email+password and Google sign-in (app/auth/firebase.py). The
+    response's password_setup_link is a one-time link for the admin to
+    hand to the new user; this backend has no email-delivery
+    infrastructure, so nothing gets sent automatically.
     """
     existing = session.execute(select(AppUser).where(AppUser.email == body.email)).scalar_one_or_none()
     if existing is not None:
@@ -124,7 +167,14 @@ def create_user(
     new_user = AppUser(**body.model_dump(), created_by=user.user_id)
     session.add(new_user)
     session.flush()
-    return new_user
+
+    password_setup_link = None
+    if not new_user.is_service:
+        password_setup_link = provision_firebase_credential(new_user.email, new_user.full_name)
+
+    return UserOut.model_validate(new_user).model_copy(
+        update={"password_setup_link": password_setup_link}
+    )
 
 
 @router.get("/users/{user_id}", response_model=UserDetail)

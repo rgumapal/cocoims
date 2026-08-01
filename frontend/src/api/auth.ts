@@ -2,6 +2,7 @@
 // using TanStack Query here — these run *before* a query client has any
 // user context to key on, and client.ts's 401-retry logic depends on
 // calling refreshTokens() directly, not through the query cache.
+import { API_BASE_URL } from "./config";
 
 const ACCESS_TOKEN_KEY = "cocoims.access_token";
 const REFRESH_TOKEN_KEY = "cocoims.refresh_token";
@@ -34,18 +35,36 @@ interface TokenResponse {
   token_type: string;
 }
 
-export async function login(email: string, password: string): Promise<void> {
-  const response = await fetch("/api/v1/auth/login", {
+async function loginRequest(path: string, body: unknown, failureMessage: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify(body),
   });
   if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(body?.detail ?? "Login failed");
+    const errBody = (await response.json().catch(() => null)) as { detail?: string } | null;
+    throw new Error(errBody?.detail ?? failureMessage);
   }
   const tokens = (await response.json()) as TokenResponse;
   setTokens(tokens.access_token, tokens.refresh_token);
+}
+
+/** Legacy bcrypt/JWT login (backend/app/auth/router.py's /login) — left in
+ * place as a dormant fallback but no longer called by the UI. Firebase
+ * (email+password and Google both) is now the one sign-in path; see
+ * loginWithFirebase below. */
+export async function login(email: string, password: string): Promise<void> {
+  await loginRequest("/api/v1/auth/login", { email, password }, "Login failed");
+}
+
+/** Exchanges a Firebase ID token — obtained from either
+ * auth/firebase.ts's signInWithGoogle() or signInWithEmailPassword() — for
+ * this app's own JWT pair. One backend endpoint for both, since the token
+ * itself already says which provider was used; see
+ * backend/app/auth/router.py's firebase_login docstring for why an
+ * unrecognized email is rejected rather than auto-provisioned. */
+export async function loginWithFirebase(idToken: string): Promise<void> {
+  await loginRequest("/api/v1/auth/firebase", { id_token: idToken }, "Sign-in failed");
 }
 
 export async function logout(): Promise<void> {
@@ -55,7 +74,7 @@ export async function logout(): Promise<void> {
     // Best-effort — see backend's /auth/logout docstring: stateless JWTs,
     // no server-side revocation in this phase, so this is advisory. Never
     // block the UI logout on it.
-    await fetch("/api/v1/auth/logout", {
+    await fetch(`${API_BASE_URL}/api/v1/auth/logout`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     }).catch(() => undefined);
@@ -68,7 +87,7 @@ export async function refreshTokens(): Promise<string | null> {
   const refreshToken = getRefreshToken();
   if (!refreshToken) return null;
 
-  const response = await fetch("/api/v1/auth/refresh", {
+  const response = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ refresh_token: refreshToken }),

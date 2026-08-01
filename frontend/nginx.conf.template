@@ -1,0 +1,13 @@
+server {
+    listen ${PORT};
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # React Router (client-side routing): any path that isn't a real static
+    # file falls back to index.html, so deep links like /items/CP001 work
+    # on a hard refresh instead of 404ing at nginx.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
