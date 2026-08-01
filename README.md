@@ -60,12 +60,17 @@ Check it worked: `curl http://127.0.0.1:8010/health` → `{"status":"ok"}`.
 That endpoint round-trips a real query to Cloud SQL, so it's a genuine
 smoke test, not just "the process started."
 
-Login is via Firebase (Google sign-in or email+password), not the seeded
-`password_hash` column — accounts are admin-provisioned, no public sign-up.
-`regie.gumapal@gmail.com` is the one real, already-provisioned account.
-To get a second login for testing, create a user through the app itself
-(Users & Roles → New User) — that auto-provisions a Firebase credential and
-returns a one-time password-setup link.
+Login is via Firebase, not the seeded `password_hash` column — accounts are
+admin-provisioned, no public sign-up. The login page only shows **Sign in
+with Google** right now (email+password sign-in exists at the Firebase/API
+layer — `signInWithEmailPassword` in `frontend/src/auth/firebase.ts`, same
+backend endpoint — but isn't wired into the UI; removed after it caused
+confusing failures in practice, see git history on `LoginPage.tsx` if you
+need to bring it back). `regie.gumapal@gmail.com` is the one real,
+already-provisioned account. To get a second login for testing, create a
+user through the app itself (Users & Roles → New User) — that
+auto-provisions a Firebase credential and returns a one-time
+password-setup link.
 
 Once logged in via the frontend (below), `http://127.0.0.1:8010/docs` is
 still useful for exercising endpoints directly (FastAPI's auto-generated
@@ -145,17 +150,19 @@ client's workbook, plus assumed reference data (areas/clusters/routes/
 calendar) not yet confirmed by the client — `db/seed/002_client_data.sql`
 is annotated `[REAL]` / `[ASSUMED]` / `[DERIVED]` section by section.
 
-**Backend API**: Firebase Auth (Google sign-in + email/password,
-admin-provisioned accounts only — no public sign-up; the old JWT/bcrypt
-`/api/v1/auth/login` stays as a dormant fallback), permission and
-branch-scope enforcement (API-layer permission check + DB-layer RLS, per
-SPEC §7.4 — neither substitutes for the other), a post-login dashboard
-(one permission-gated aggregate read per nav screen), and the core
-data-entry surface: items (CRUD, aliases, effective-dated prices),
-locations (CRUD, lifecycle status transitions with full history, OM
-assignment, closures), six reference tables
-(categories/uom/clusters/areas/routes/reason-codes), stock (balance + FEFO
-ageing, paginated ledger, manual adjustments), receiving and sales
+**Backend API**: Firebase Auth (Google sign-in is the only path the UI
+exposes; email+password works at the API/Firebase layer but isn't wired
+into the login page — see the login note above; the old JWT/bcrypt
+`/api/v1/auth/login` stays as a dormant fallback), admin-provisioned
+accounts only, no public sign-up. Permission and branch-scope enforcement
+(API-layer permission check + DB-layer RLS, per SPEC §7.4 — neither
+substitutes for the other). A post-login dashboard (one permission-gated
+aggregate read per nav screen, a business-date picker so any day can be
+reviewed, not just today), and the core data-entry surface: items (CRUD,
+aliases, effective-dated prices), locations (CRUD, lifecycle status
+transitions with full history, OM assignment, closures), six reference
+tables (categories/uom/clusters/areas/routes/reason-codes), stock (balance
++ FEFO ageing, paginated ledger, manual adjustments), receiving and sales
 (diff-based edits against the append-only ledger — editing a saved day
 writes a signed correction, never an UPDATE/DELETE), waste, transfers, and
 physical counts (with separation-of-duties on approval). 18 backend tests,
@@ -198,7 +205,7 @@ cocopan-ims/
 │   │   ├── domain/         # ledger.py — balance, FEFO ageing, write_movement
 │   │   └── models/         # SQLAlchemy models mirroring db/ddl
 │   ├── alembic/           # migrations — the source of truth for schema history
-│   ├── scripts/            # set_dev_passwords.py (dev-only, dormant-fallback only)
+│   ├── scripts/            # set_dev_passwords.py (dormant-fallback only), seed_sample_data.py (dev-only)
 │   ├── Dockerfile          # Cloud Run image
 │   └── tests/              # pytest — deny-by-default, RLS-at-DB-layer, immutability, NULL≠0
 ├── frontend/             # React 18 + Vite + TypeScript + Tailwind
@@ -223,6 +230,7 @@ cocopan-ims/
 | Lint / type-check backend | `cd backend && ruff check app tests scripts && mypy app tests scripts` |
 | Type-check frontend | `cd frontend && npm run typecheck` |
 | Isolated local Postgres (risky migration iteration only) | `docker compose up -d`, point `.env` at `localhost:5433` with the `POSTGRES_*` creds, `docker compose down -v` to wipe |
+| Populate a business date with sample Receiving/Sales/Waste data | `cd backend && python -m scripts.seed_sample_data --date YYYY-MM-DD` (dry run by default; add `--execute` to write — see the script's own docstring) |
 | Build + deploy | see the `deploy` skill |
 
 ## Known open items
