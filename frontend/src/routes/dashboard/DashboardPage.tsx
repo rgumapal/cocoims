@@ -1,11 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "@/api/client";
 import type { DashboardSummary } from "@/api/types";
 import { useAuth } from "@/auth/AuthContext";
 import { Badge } from "@/components/ui/Badge";
+import { Input } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { todayLocalDate } from "@/lib/date";
 import {
   BranchesIcon,
   CountsIcon,
@@ -21,6 +23,20 @@ import {
 const CARD_CLASSES =
   "flex flex-col gap-2 rounded-lg border border-border bg-surface p-4 text-left transition-colors duration-theme hover:border-border-strong hover:bg-surface-hover";
 
+type Tint = "blue" | "green" | "red" | "purple" | "teal" | "slate";
+
+// Static strings, not template literals: Tailwind scans source text for
+// class names, so a constructed `bg-tint-${tone}-bg` would never make it
+// into the built stylesheet.
+const TINT_CLASSES: Record<Tint, string> = {
+  blue: "bg-tint-blue-bg text-tint-blue-fg",
+  green: "bg-tint-green-bg text-tint-green-fg",
+  red: "bg-tint-red-bg text-tint-red-fg",
+  purple: "bg-tint-purple-bg text-tint-purple-fg",
+  teal: "bg-tint-teal-bg text-tint-teal-fg",
+  slate: "bg-tint-slate-bg text-tint-slate-fg",
+};
+
 // Rounded, comma-grouped pesos — a dashboard headline reads faster without
 // cents (SalesPage itself still shows exact centavos where that precision
 // matters for a single line item). null (not 0) is a real state here: no
@@ -34,21 +50,45 @@ function formatMoney(value: string | null): string {
 
 export default function DashboardPage() {
   const { hasPermission } = useAuth();
+  const [businessDate, setBusinessDate] = useState(todayLocalDate);
 
   // Cheap by design: one round trip for every card on this page, not one
   // query per widget — TanStack Query's own cache/loading/error states are
   // the "one obvious way" for server data (CLAUDE.md), so no hand-rolled
   // per-card fetching here either.
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["dashboard"],
-    queryFn: () => apiGet<DashboardSummary>("/api/v1/dashboard"),
+    queryKey: ["dashboard", businessDate],
+    queryFn: () =>
+      apiGet<DashboardSummary>(`/api/v1/dashboard?business_date=${businessDate}`),
   });
+
+  const isToday = businessDate === todayLocalDate();
+  // "Today's snapshot" only when it really is today — on any other date the
+  // word would be quietly wrong, which is worse than being verbose.
+  const dayLabel = isToday
+    ? "Today's"
+    : new Date(`${businessDate}T00:00:00`).toLocaleDateString(undefined, {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      });
 
   return (
     <div className="flex h-full flex-col overflow-auto">
       <PageHeader
         title="Dashboard"
-        description="Today's snapshot across every screen — click any card to dive in."
+        description={`${dayLabel} snapshot across every screen — click any card to dive in.`}
+        actions={
+          <label className="flex items-center gap-2">
+            <span className="font-ui text-small text-text-2">Date</span>
+            <Input
+              type="date"
+              value={businessDate}
+              onChange={(e) => setBusinessDate(e.target.value || todayLocalDate())}
+              aria-label="Business date to summarise"
+            />
+          </label>
+        }
       />
 
       <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -63,7 +103,7 @@ export default function DashboardPage() {
         {data && (
           <>
             {data.receiving && (
-              <StatCard to="/receiving" icon={<ReceivingIcon />} title="Receiving">
+              <StatCard to="/receiving" icon={<ReceivingIcon />} tint="blue" title="Receiving">
                 <Stat
                   value={data.receiving.branches_reported_today}
                   label={`of ${data.receiving.active_branch_count} active branches reported`}
@@ -77,8 +117,11 @@ export default function DashboardPage() {
             )}
 
             {data.sales && (
-              <StatCard to="/sales" icon={<SalesIcon />} title="Sales">
-                <Stat value={formatMoney(data.sales.total_sales)} label="total sales today" />
+              <StatCard to="/sales" icon={<SalesIcon />} tint="green" title="Sales">
+                <Stat
+                  value={formatMoney(data.sales.total_sales)}
+                  label={`total reported sales ${isToday ? "today" : "that day"}`}
+                />
                 {data.sales.branches_reporting > 0 && (
                   <p className="font-data text-small tabular-nums text-text-2">
                     High: {formatMoney(data.sales.highest_branch_sales)}, Low:{" "}
@@ -95,13 +138,17 @@ export default function DashboardPage() {
             )}
 
             {data.waste && (
-              <StatCard to="/waste" icon={<WasteIcon />} title="Waste Log">
-                <Stat value={data.waste.items_logged_today} label="items logged today" />
+              <StatCard to="/waste" icon={<WasteIcon />} tint="red" title="Waste Log">
+                <Stat value={data.waste.items_logged_today} label="items logged" />
+                <SubStat
+                  value={data.waste.branches_logged_today}
+                  label={`branch${data.waste.branches_logged_today === 1 ? "" : "es"} reporting`}
+                />
               </StatCard>
             )}
 
             {data.counts && (
-              <StatCard to="/counts" icon={<CountsIcon />} title="Counts">
+              <StatCard to="/counts" icon={<CountsIcon />} tint="purple" title="Counts">
                 <Stat value={data.counts.open_count} label="open counts" />
                 <SubStat
                   value={data.counts.pending_approval_count}
@@ -112,17 +159,27 @@ export default function DashboardPage() {
             )}
 
             {data.stock && (
-              <StatCard to="/stock" icon={<StockIcon />} title="Stock Explorer">
+              <StatCard to="/stock" icon={<StockIcon />} tint="teal" title="Stock Explorer">
                 <Stat
                   value={data.stock.run_outs_today}
-                  label="branch/item run-outs today"
+                  label="branch/item run-outs"
                   badge={data.stock.run_outs_today > 0 ? "Needs attention" : undefined}
                 />
               </StatCard>
             )}
 
+            {/* Everything above is the day's activity; everything below is
+                configuration that rarely changes. The divider keeps a
+                maintenance screen from reading as another daily metric. */}
+            <div className="col-span-full mt-2 flex items-center gap-3">
+              <h2 className="font-dense text-micro uppercase tracking-[0.06em] text-text-3">
+                Setup &amp; Administration
+              </h2>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+
             {data.items && (
-              <StatCard to="/items" icon={<ItemsIcon />} title="Items">
+              <StatCard to="/items" icon={<ItemsIcon />} tint="slate" title="Items">
                 <Stat
                   value={data.items.active_count}
                   label={`active, of ${data.items.total_count} total`}
@@ -131,7 +188,7 @@ export default function DashboardPage() {
             )}
 
             {data.branches && (
-              <StatCard to="/branches" icon={<BranchesIcon />} title="Branches">
+              <StatCard to="/branches" icon={<BranchesIcon />} tint="slate" title="Branches">
                 <Stat
                   value={data.branches.active_count}
                   label={`active, of ${data.branches.total_count} total`}
@@ -143,7 +200,7 @@ export default function DashboardPage() {
                 nav doesn't gate Reference Data behind a permission either
                 (see AppShell.tsx), so it's always offered; Users & Roles
                 mirrors the nav's own user.manage gate. */}
-            <StatCard to="/refdata" icon={<RefDataIcon />} title="Reference Data">
+            <StatCard to="/refdata" icon={<RefDataIcon />} tint="slate" title="Reference Data">
               <p className="font-ui text-small text-text-2">
                 Categories, units, clusters, areas, routes, and reason codes shared across the
                 system.
@@ -151,7 +208,7 @@ export default function DashboardPage() {
             </StatCard>
 
             {hasPermission("user.manage") && (
-              <StatCard to="/users" icon={<UsersIcon />} title="Users & Roles">
+              <StatCard to="/users" icon={<UsersIcon />} tint="slate" title="Users & Roles">
                 <p className="font-ui text-small text-text-2">
                   Manage accounts, roles, and branch access.
                 </p>
@@ -168,17 +225,24 @@ function StatCard({
   to,
   icon,
   title,
+  tint,
   children,
 }: {
   to: string;
   icon: ReactNode;
   title: string;
+  tint: Tint;
   children: ReactNode;
 }) {
   return (
     <Link to={to} className={CARD_CLASSES}>
-      <div className="flex items-center gap-2 text-text-2">
-        {icon}
+      <div className="flex items-center gap-2.5">
+        <span
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${TINT_CLASSES[tint]}`}
+          aria-hidden="true"
+        >
+          {icon}
+        </span>
         <span className="font-ui text-h2 text-text">{title}</span>
       </div>
       {children}

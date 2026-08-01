@@ -31,6 +31,21 @@ export default {
         "header-bg": "var(--header-bg)",
         "header-fg": "var(--header-fg)",
 
+        // Decorative category tints (Dashboard icon chips) — see
+        // tokens.css for why these are separate from the status colours.
+        "tint-blue-fg": "var(--tint-blue-fg)",
+        "tint-blue-bg": "var(--tint-blue-bg)",
+        "tint-green-fg": "var(--tint-green-fg)",
+        "tint-green-bg": "var(--tint-green-bg)",
+        "tint-red-fg": "var(--tint-red-fg)",
+        "tint-red-bg": "var(--tint-red-bg)",
+        "tint-purple-fg": "var(--tint-purple-fg)",
+        "tint-purple-bg": "var(--tint-purple-bg)",
+        "tint-teal-fg": "var(--tint-teal-fg)",
+        "tint-teal-bg": "var(--tint-teal-bg)",
+        "tint-slate-fg": "var(--tint-slate-fg)",
+        "tint-slate-bg": "var(--tint-slate-bg)",
+
         positive: "var(--positive)",
         attention: "var(--attention)",
         negative: "var(--negative)",

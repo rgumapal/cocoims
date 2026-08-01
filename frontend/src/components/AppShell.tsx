@@ -54,13 +54,17 @@ const NAV_GROUPS: { label: string; links: NavLinkItem[] }[] = [
     ],
   },
   {
-    label: "Actuals",
-    links: [{ to: "/counts", label: "Counts", icon: CountsIcon }],
+    // Counts and Stock Explorer are both "what is actually on the shelf" —
+    // one captures it, the other reads it back.
+    label: "Stocks",
+    links: [
+      { to: "/counts", label: "Counts", icon: CountsIcon },
+      { to: "/stock", label: "Stock Explorer", icon: StockIcon },
+    ],
   },
   {
-    label: "Catalog & Stock",
+    label: "Catalog",
     links: [
-      { to: "/stock", label: "Stock Explorer", icon: StockIcon },
       { to: "/items", label: "Items", icon: ItemsIcon },
       { to: "/branches", label: "Branches", icon: BranchesIcon },
       { to: "/refdata", label: "Reference Data", icon: RefDataIcon },
@@ -197,13 +201,13 @@ export function AppShell() {
         )}
 
         <nav
-          className={`z-40 shrink-0 overflow-y-auto border-r border-border bg-surface transition-transform duration-theme ${
+          className={`z-40 flex shrink-0 flex-col overflow-y-auto border-r border-border bg-surface transition-transform duration-theme ${
             isMobile
               ? `absolute inset-y-0 left-0 w-[260px] ${navOpen ? "translate-x-0" : "-translate-x-full"}`
               : `static w-[220px] ${navOpen ? "" : "hidden"}`
           }`}
         >
-          <div className="flex flex-col gap-4 p-2 py-3">
+          <div className="flex flex-1 flex-col gap-4 p-2 py-3">
             <NavLink
               to="/dashboard"
               onClick={closeNavOnMobile}
@@ -249,6 +253,16 @@ export function AppShell() {
                 </ul>
               </div>
             ))}
+          </div>
+
+          {/* mt-auto, not absolute: the nav is a flex column, so this sits
+              below the links on a short list and still gets pushed to the
+              bottom of the viewport, without overlapping a long one. */}
+          <div className="mt-auto border-t border-border px-3 py-2.5">
+            <p className="font-ui text-micro text-text-3">v{__APP_VERSION__}</p>
+            <p className="font-ui text-micro text-text-3">
+              © {new Date().getFullYear()} RGSuite
+            </p>
           </div>
         </nav>
 

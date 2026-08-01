@@ -19,7 +19,7 @@ import datetime as dt
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
@@ -57,6 +57,7 @@ class SalesSummary(BaseModel):
 
 class WasteSummary(BaseModel):
     items_logged_today: int
+    branches_logged_today: int
 
 
 class CountsSummary(BaseModel):
@@ -97,13 +98,38 @@ def _distinct_items_moved(session: Session, movement_type: str, business_date: d
     ).scalar_one()
 
 
+def _total_qty_moved(
+    session: Session, movement_type: str, business_date: dt.date, *, negate: bool = False
+) -> int:
+    """Total units moved, not the count of distinct SKUs — "500 items
+    received" means 500 units arrived, not "5 different products showed
+    up." negate=True for movement types stored negative (SALE, WASTE)."""
+    total = session.execute(
+        select(func.coalesce(func.sum(StockMovement.qty), 0)).where(
+            StockMovement.movement_type == movement_type,
+            StockMovement.business_date == business_date,
+        )
+    ).scalar_one()
+    signed = -total if negate else total
+    return int(signed)
+
+
+def _distinct_branches_moved(session: Session, movement_type: str, business_date: dt.date) -> int:
+    return session.execute(
+        select(func.count(func.distinct(StockMovement.location_code))).where(
+            StockMovement.movement_type == movement_type,
+            StockMovement.business_date == business_date,
+        )
+    ).scalar_one()
+
+
 def _receiving_summary(session: Session, today: dt.date) -> ReceivingSummary:
-    items_received_today = _distinct_items_moved(session, "RECEIPT", today)
+    items_received_today = _total_qty_moved(session, "RECEIPT", today)
 
     daily_counts = (
         select(
             StockMovement.business_date,
-            func.count(func.distinct(StockMovement.item_code)).label("daily_count"),
+            func.sum(StockMovement.qty).label("daily_count"),
         )
         .where(
             StockMovement.movement_type == "RECEIPT",
@@ -183,7 +209,7 @@ def _sales_summary(session: Session, today: dt.date) -> SalesSummary:
         highest_branch_sales=Decimal(row.highest_branch_sales) if row.highest_branch_sales is not None else None,
         lowest_branch_sales=Decimal(row.lowest_branch_sales) if row.lowest_branch_sales is not None else None,
         average_branch_sales=Decimal(row.average_branch_sales) if row.average_branch_sales is not None else None,
-        total_items_sold=_distinct_items_moved(session, "SALE", today),
+        total_items_sold=_total_qty_moved(session, "SALE", today, negate=True),
         branches_reporting=row.branches_reporting,
     )
 
@@ -192,6 +218,9 @@ def _sales_summary(session: Session, today: dt.date) -> SalesSummary:
 def get_dashboard(
     session: Annotated[Session, Depends(get_db)],
     user: Annotated[AppUser, Depends(get_current_user)],
+    business_date: dt.date | None = Query(
+        None, description="Day to summarise. Defaults to the server's current date."
+    ),
 ) -> DashboardOut:
     """One aggregate read per nav screen, each included only if the caller
     holds the same permission that screen's own list endpoint requires.
@@ -200,13 +229,19 @@ def get_dashboard(
     endpoint — each section checks its own (see module docstring).
     """
     permissions = get_user_permissions(session, user.user_id)
-    today = dt.date.today()
+    # The client sends its own local business date (the browser's calendar
+    # day, not UTC's — see frontend/src/lib/date.ts); this fallback only
+    # covers a caller that omits it entirely, e.g. curl or /docs.
+    today = business_date or dt.date.today()
 
     receiving = sales = waste = stock = None
     if "order.read" in permissions:
         receiving = _receiving_summary(session, today)
         sales = _sales_summary(session, today)
-        waste = WasteSummary(items_logged_today=_distinct_items_moved(session, "WASTE", today))
+        waste = WasteSummary(
+            items_logged_today=_distinct_items_moved(session, "WASTE", today),
+            branches_logged_today=_distinct_branches_moved(session, "WASTE", today),
+        )
         run_outs_today = session.execute(
             select(func.count()).select_from(SoldOutEvent).where(SoldOutEvent.business_date == today)
         ).scalar_one()

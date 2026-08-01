@@ -46,6 +46,7 @@ export interface SalesSummary {
 
 export interface WasteSummary {
   items_logged_today: number;
+  branches_logged_today: number;
 }
 
 export interface CountsSummary {

@@ -92,6 +92,23 @@
   --attention-bg: #e7eff8;
   --negative-bg: #fbe9e8;
 
+  /* Decorative category tints — icon chips only, never text or state.
+     Deliberately separate from --positive/--attention/--negative so that
+     colouring a Dashboard icon by domain doesn't dilute what those three
+     status colours mean when they appear on real data. */
+  --tint-blue-fg: #2563a8;
+  --tint-blue-bg: #e7eff8;
+  --tint-green-fg: #16785f;
+  --tint-green-bg: #e6f2ee;
+  --tint-red-fg: #b3261e;
+  --tint-red-bg: #fbe9e8;
+  --tint-purple-fg: #6b4796;
+  --tint-purple-bg: #efe9f7;
+  --tint-teal-fg: #12707a;
+  --tint-teal-bg: #e2f1f2;
+  --tint-slate-fg: var(--n-600);
+  --tint-slate-bg: var(--n-100);
+
   --shadow-1: 0 1px 2px rgba(28, 27, 25, 0.06);
   --shadow-2: 0 4px 12px rgba(28, 27, 25, 0.1);
 }
@@ -123,6 +140,22 @@
   --positive-bg: #12312a;
   --attention-bg: #16283a;
   --negative-bg: #38201e;
+
+  /* See the light block for why these are separate from the status
+     colours. Foregrounds lift and backgrounds drop so the chips keep the
+     same weight against a dark surface. */
+  --tint-blue-fg: #7fb0e6;
+  --tint-blue-bg: #16283a;
+  --tint-green-fg: #4cb99a;
+  --tint-green-bg: #12312a;
+  --tint-red-fg: #e88a83;
+  --tint-red-bg: #38201e;
+  --tint-purple-fg: #b195d6;
+  --tint-purple-bg: #271e38;
+  --tint-teal-fg: #57b8c0;
+  --tint-teal-bg: #102e31;
+  --tint-slate-fg: var(--n-300);
+  --tint-slate-bg: var(--n-800);
 
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.5);
