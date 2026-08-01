@@ -17,5 +17,7 @@ files/
 *.egg-info/
 *.tsbuildinfo
 
-# Local Cloud SQL Auth Proxy logs (see CLAUDE.md's "Local development database")
+# Local dev process logs (Cloud SQL Auth Proxy, backend) — see CLAUDE.md's
+# "Local development database"
 cloud-sql-proxy*.log
+backend*.log
