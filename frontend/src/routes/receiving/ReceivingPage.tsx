@@ -57,6 +57,14 @@ export default function ReceivingPage() {
   // day with nothing on file starts unlocked (there's nothing to protect
   // yet).
   const [isEditing, setIsEditing] = useState(true);
+  // Guards Save/Cancel for a moment right after Edit is clicked. Edit and
+  // Save render in the exact same screen position (Edit disappears the
+  // instant isEditing flips true, Save appears there instead), so a fast
+  // real double-click — the first click unlocking, the second landing on
+  // the now-submit button before the user even sees the table changed —
+  // silently resubmits unchanged data and relocks the table. From the
+  // user's side that looks exactly like "clicking Edit did nothing."
+  const [saveGuardActive, setSaveGuardActive] = useState(false);
   // Tracks which (branch, date) the table currently reflects, so a
   // background refetch doesn't clobber an in-progress edit — only sync
   // when the key itself changes (same pattern as ItemDetailPage/
@@ -142,6 +150,12 @@ export default function ReceivingPage() {
     setLines(linesFromServer(existingLines ?? []));
     setError(null);
     setIsEditing(false);
+  }
+
+  function startEditing(): void {
+    setIsEditing(true);
+    setSaveGuardActive(true);
+    window.setTimeout(() => setSaveGuardActive(false), 400);
   }
 
   const usedItemCodes = new Set(lines.map((l) => l.item_code).filter(Boolean));
@@ -332,16 +346,20 @@ export default function ReceivingPage() {
 
         <div className="flex items-center gap-2">
           {isSaved ? (
-            <Button type="button" variant="primary" onClick={() => setIsEditing(true)}>
+            <Button type="button" variant="primary" onClick={startEditing}>
               Edit
             </Button>
           ) : (
             <>
-              <Button type="submit" variant="primary" disabled={saveMutation.isPending}>
+              <Button type="submit" variant="primary" disabled={saveMutation.isPending || saveGuardActive}>
                 {saveMutation.isPending ? "Saving…" : "Save receiving"}
               </Button>
               {(existingLines?.length ?? 0) > 0 && (
-                <Button type="button" onClick={cancelEditing} disabled={saveMutation.isPending}>
+                <Button
+                  type="button"
+                  onClick={cancelEditing}
+                  disabled={saveMutation.isPending || saveGuardActive}
+                >
                   Cancel
                 </Button>
               )}
