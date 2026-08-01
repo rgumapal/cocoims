@@ -10,7 +10,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -39,6 +39,14 @@ class ItemOut(BaseModel):
     status_remark: str | None
     target_date: dt.date | None
     is_orderable: bool
+    # Currently-effective network SRP (location_code IS NULL), same
+    # date-window and price_status rule as core.v_effective_price
+    # (migration 0002) — surfaced here so the list itself answers "what
+    # does this sell for" without a click into each item's Prices tab.
+    # A branch override on top of this network price is still only visible
+    # on the item detail page; this column is the network default, not a
+    # per-branch resolution.
+    network_srp: Decimal | None = None
 
     model_config = {"from_attributes": True}
 
@@ -138,15 +146,37 @@ def list_items(
     §4.3's search_vector (idx_item_search) rather than a plain substring
     match, so misspellings and word order still find the right item.
     """
-    stmt = select(Item).order_by(Item.item_code)
+    # Set-based, not per-row: a correlated scalar subquery folded into the
+    # same SELECT, so the network price rides along with every page of
+    # items in one round trip rather than one price lookup per row.
+    network_srp_subq = (
+        select(ItemPrice.srp)
+        .where(
+            ItemPrice.item_code == Item.item_code,
+            ItemPrice.location_code.is_(None),
+            ItemPrice.price_status == "CONFIRMED",
+            ItemPrice.effective_from <= func.current_date(),
+            or_(ItemPrice.effective_to.is_(None), ItemPrice.effective_to > func.current_date()),
+        )
+        .order_by(ItemPrice.effective_from.desc())
+        .limit(1)
+        .correlate(Item)
+        .scalar_subquery()
+    )
+
+    stmt = select(Item, network_srp_subq.label("network_srp")).order_by(Item.item_code)
     if search:
         stmt = stmt.where(Item.search_vector.op("@@")(func.plainto_tsquery("simple", search)))
     if cursor:
         stmt = stmt.where(Item.item_code > cursor)
 
-    rows = session.execute(stmt.limit(limit + 1)).scalars().all()
-    next_cursor = rows[limit - 1].item_code if len(rows) > limit else None
-    return Page(items=[ItemOut.model_validate(r) for r in rows[:limit]], next_cursor=next_cursor)
+    rows = session.execute(stmt.limit(limit + 1)).all()
+    next_cursor = rows[limit - 1][0].item_code if len(rows) > limit else None
+    items_out = [
+        ItemOut.model_validate(item).model_copy(update={"network_srp": srp})
+        for item, srp in rows[:limit]
+    ]
+    return Page(items=items_out, next_cursor=next_cursor)
 
 
 @router.post("", response_model=ItemOut, status_code=201)

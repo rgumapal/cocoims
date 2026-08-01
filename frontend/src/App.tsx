@@ -7,6 +7,7 @@ import { RequireAuth } from "@/auth/RequireAuth";
 // its own chunk, so e.g. the Reference Data admin screen's JS never ships
 // on first paint for someone who only ever opens Receiving.
 const LoginPage = lazy(() => import("@/routes/LoginPage"));
+const DashboardPage = lazy(() => import("@/routes/dashboard/DashboardPage"));
 const ItemsListPage = lazy(() => import("@/routes/items/ItemsListPage"));
 const ItemDetailPage = lazy(() => import("@/routes/items/ItemDetailPage"));
 const BranchesListPage = lazy(() => import("@/routes/branches/BranchesListPage"));
@@ -42,7 +43,8 @@ export function App() {
             </RequireAuth>
           }
         >
-          <Route path="/" element={<Navigate to="/items" replace />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
 
           <Route path="/items" element={<ItemsListPage />} />
           <Route path="/items/:itemCode" element={<ItemDetailPage />} />

@@ -85,7 +85,7 @@ export default function RefDataPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Reference Data"
-        description="Categories, units, clusters, areas, routes, and reason codes used across the system."
+        description="The shared vocabularies every other screen depends on — item categories, units of measure, clusters, areas, routes, and reason codes. Deactivating an entry removes it from new dropdowns everywhere without breaking historical records that already reference it."
       />
       <div className="flex gap-1 border-b border-border px-4">
         {TABS.map((t) => (

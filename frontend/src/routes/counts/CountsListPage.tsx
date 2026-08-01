@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Field, Select } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { todayLocalDate } from "@/lib/date";
 
 const COUNT_TYPES = ["DAILY_EI", "CYCLE", "FULL"];
 
@@ -32,7 +33,7 @@ export default function CountsListPage() {
   const [showDialog, setShowDialog] = useState(false);
   const [locationCode, setLocationCode] = useState("");
   const [countType, setCountType] = useState("CYCLE");
-  const [businessDate, setBusinessDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [businessDate, setBusinessDate] = useState(todayLocalDate);
   const [error, setError] = useState<string | null>(null);
 
   const { data: sessions, isLoading } = useQuery({
@@ -65,7 +66,7 @@ export default function CountsListPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Counts"
-        description="Open, submit, and approve physical stock counts."
+        description="Reconcile what the system expects on the shelf against what's physically there. Open a count, enter what you actually counted per item, submit it, then a second person approves it if the variance is large enough to require sign-off."
         actions={
           <Button variant="primary" onClick={() => setShowDialog(true)}>
             Open Count

@@ -28,6 +28,15 @@ const columns: ColumnDef<Item, any>[] = [
     cell: (ctx) => <NumericCell value={ctx.getValue<string>()} />,
   },
   {
+    accessorKey: "network_srp",
+    header: "Price (SRP)",
+    size: 110,
+    cell: (ctx) => {
+      const srp = ctx.getValue<string | null>();
+      return <NumericCell value={srp === null ? null : `₱${srp}`} />;
+    },
+  },
+  {
     accessorKey: "lifecycle_status",
     header: "Status",
     size: 140,
@@ -54,7 +63,7 @@ export default function ItemsListPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Items"
-        description="The network item master — SKUs, pricing, and lifecycle status."
+        description="The network item master: every SKU Cocopan sells, its shelf life and replenishment policy, current network price, and lifecycle status. Changes here affect ordering and forecasting network-wide, and every branch's pricing unless overridden locally."
         actions={
           <RequirePermission permission="item.create">
             <Button variant="primary" onClick={() => navigate("/items/new")}>

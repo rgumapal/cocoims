@@ -23,6 +23,61 @@ export interface MeResponse {
 }
 
 // ---------------------------------------------------------------------
+// dashboard — each section is null when the caller lacks the permission
+// the underlying screen itself requires (deny by default); the frontend
+// renders exactly the cards it's given, no separate permission re-check.
+// ---------------------------------------------------------------------
+export interface ReceivingSummary {
+  branches_reported_today: number;
+  active_branch_count: number;
+  items_received_today: number;
+  is_low: boolean;
+}
+
+export interface SalesSummary {
+  total_sales: string;
+  // null only when no branch had any sales today (nothing to compare).
+  highest_branch_sales: string | null;
+  lowest_branch_sales: string | null;
+  average_branch_sales: string | null;
+  total_items_sold: number;
+  branches_reporting: number;
+}
+
+export interface WasteSummary {
+  items_logged_today: number;
+}
+
+export interface CountsSummary {
+  open_count: number;
+  pending_approval_count: number;
+}
+
+export interface StockSummary {
+  run_outs_today: number;
+}
+
+export interface ItemsSummary {
+  active_count: number;
+  total_count: number;
+}
+
+export interface BranchesSummary {
+  active_count: number;
+  total_count: number;
+}
+
+export interface DashboardSummary {
+  receiving: ReceivingSummary | null;
+  sales: SalesSummary | null;
+  waste: WasteSummary | null;
+  counts: CountsSummary | null;
+  stock: StockSummary | null;
+  items: ItemsSummary | null;
+  branches: BranchesSummary | null;
+}
+
+// ---------------------------------------------------------------------
 // items
 // ---------------------------------------------------------------------
 export interface Item {
@@ -43,6 +98,10 @@ export interface Item {
   status_remark: string | null;
   target_date: string | null;
   is_orderable: boolean;
+  // Currently-effective network SRP (branch overrides live on the item
+  // detail page's Prices tab) — null when no CONFIRMED network price is
+  // in its effective date window right now.
+  network_srp: string | null;
 }
 
 export interface ItemAlias {
@@ -214,6 +273,46 @@ export interface TransferResponse {
   transfer_in: StockMovement;
 }
 
+// GET/POST /api/v1/receiving both return this shape — the *net* quantity
+// on file per item for one branch/date, not raw movement rows. Editing is
+// diff-based server-side (stock_movement is append-only), so the frontend
+// never computes deltas itself — it just redraws the table with whatever
+// this endpoint returns after a save.
+export interface ReceivingLine {
+  item_code: string;
+  qty: string;
+  uom: string;
+  production_date: string | null;
+  unit_cost: string | null;
+  ref_doc_id: string | null;
+  confirmed_by_name: string | null;
+  confirmed_by_user_id: number | null;
+  confirmed_by_full_name: string | null;
+  // When this line's latest movement/correction was written — the audit
+  // trail for "who last touched this line," distinct from confirmed_by_name
+  // (an optional free-text note on who physically handled the delivery).
+  updated_at: string | null;
+}
+
+// GET/POST /api/v1/sales — same net-state, diff-on-save shape as
+// ReceivingLine above, plus price info (core.v_effective_price) that's
+// display-only on this screen, never submitted back.
+export interface SalesLine {
+  item_code: string;
+  qty: string;
+  uom: string;
+  sold_out: boolean;
+  unit_price: string | null;
+  total_price: string | null;
+  confirmed_by_name: string | null;
+  confirmed_by_user_id: number | null;
+  confirmed_by_full_name: string | null;
+  // When this line's latest movement/correction was written — the audit
+  // trail for "who last touched this line," distinct from confirmed_by_name
+  // (an optional free-text note on who rang it up).
+  updated_at: string | null;
+}
+
 // ---------------------------------------------------------------------
 // counts
 // ---------------------------------------------------------------------
@@ -255,6 +354,14 @@ export interface User {
   is_service: boolean;
   last_login_at: string | null;
   role_hint: string | null;
+  // Role codes held and a human-readable scope summary (e.g. "All
+  // branches" or "AREA: AREA_QC") — flattened server-side so the list can
+  // show them without a per-row fetch.
+  roles: string[];
+  scope_summary: string[];
+  // Only ever populated on the response to creating a user — a one-time
+  // Firebase password-setup link for the admin to hand to that person.
+  password_setup_link?: string | null;
 }
 
 export interface UserRoleGrant {
@@ -268,7 +375,11 @@ export interface UserScopeGrant {
   scope_value: string;
 }
 
-export interface UserDetail extends User {
+// Can't just `extends User`: the detail endpoint returns roles as full
+// grant records (role_code + granted_at), not the flattened role_code[]
+// the list endpoint returns — Omit drops the incompatible field before
+// redefining it, rather than trying to narrow it in a subinterface.
+export interface UserDetail extends Omit<User, "roles"> {
   roles: UserRoleGrant[];
   scopes: UserScopeGrant[];
 }

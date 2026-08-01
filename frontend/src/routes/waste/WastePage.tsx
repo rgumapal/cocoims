@@ -5,16 +5,20 @@ import type { Item, Location, Page, ReasonCode, StockMovement } from "@/api/type
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { todayLocalDate } from "@/lib/date";
 
 export default function WastePage() {
   const [locationCode, setLocationCode] = useState("");
   const [itemCode, setItemCode] = useState("");
-  const [businessDate, setBusinessDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [businessDate, setBusinessDate] = useState(todayLocalDate);
   const [qty, setQty] = useState("");
   const [reasonCode, setReasonCode] = useState("");
   const [productionDate, setProductionDate] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [confirmed, setConfirmed] = useState<StockMovement | null>(null);
+  // Accumulates across submissions for this session (newest first) — see
+  // ReceivingPage's identical pattern for why this replaces a one-line
+  // confirmation message.
+  const [recentEntries, setRecentEntries] = useState<StockMovement[]>([]);
 
   const { data: locations } = useQuery({
     queryKey: ["locations-picker"],
@@ -42,7 +46,7 @@ export default function WastePage() {
       }),
     onSuccess: (movement) => {
       setError(null);
-      setConfirmed(movement);
+      setRecentEntries((prev) => [movement, ...prev]);
       setQty("");
       setReasonCode("");
       setProductionDate("");
@@ -54,7 +58,7 @@ export default function WastePage() {
     <div className="mx-auto max-w-lg p-4">
       <PageHeader
         title="Waste Log"
-        description="Record spoiled, expired, or damaged stock with a reason."
+        description="Log stock that has to be written off — spoiled, expired, or damaged — with a required reason code so the loss is explainable, not just a number. Each entry writes a WASTE movement that reduces the branch's stock balance immediately."
       />
 
       <form
@@ -141,11 +145,6 @@ export default function WastePage() {
         </Field>
 
         {error && <p className="font-ui text-small text-negative">{error}</p>}
-        {confirmed && (
-          <p className="font-ui text-small text-positive">
-            Recorded: {confirmed.qty} {confirmed.uom} of {confirmed.item_code}.
-          </p>
-        )}
 
         <div>
           <Button type="submit" variant="primary" disabled={submitMutation.isPending}>
@@ -153,6 +152,42 @@ export default function WastePage() {
           </Button>
         </div>
       </form>
+
+      {recentEntries.length > 0 && (
+        <div className="border-t border-border p-4">
+          <h2 className="mb-2 font-ui text-h2 text-text">Logged this session</h2>
+          <div className="overflow-hidden rounded-md border border-border">
+            <table className="w-full border-collapse">
+              <thead className="bg-surface-2">
+                <tr>
+                  <th className="px-3 py-2 text-left font-dense text-micro uppercase tracking-[0.06em] text-text-2">Item</th>
+                  <th className="px-3 py-2 text-left font-dense text-micro uppercase tracking-[0.06em] text-text-2">Qty</th>
+                  <th className="px-3 py-2 text-left font-dense text-micro uppercase tracking-[0.06em] text-text-2">Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentEntries.map((m) => (
+                  <tr key={m.movement_id} className="border-t border-border">
+                    <td className="px-3 py-1.5 font-ui text-body text-text">{m.item_code}</td>
+                    <td className="px-3 py-1.5 font-data text-body tabular-nums text-text">
+                      {/* qty is stored signed (WASTE is negative, per
+                          ledger.py's sign convention) — this recap is a
+                          "what did I just enter" confirmation, not a ledger
+                          view, so show what was typed, not the sign. */}
+                      {m.qty.replace(/^-/, "")} {m.uom}
+                    </td>
+                    <td className="px-3 py-1.5 font-ui text-body text-text-2">
+                      {wasteReasons.find((r) => r.reason_code === m.reason_code)?.label ??
+                        m.reason_code ??
+                        "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

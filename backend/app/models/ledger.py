@@ -47,6 +47,12 @@ class StockMovement(Base):
     source_code: Mapped[str | None] = mapped_column(ForeignKey("core.source_system.source_code"))
     idempotency_key: Mapped[str | None]
     created_by: Mapped[int | None]
+    # Who physically handled this movement, if different from created_by
+    # (the logged-in system account) — e.g. a shared branch tablet account
+    # submitting on behalf of whoever actually received the delivery. Free
+    # text, not a core.app_user FK: the physical handler isn't necessarily
+    # a system user. Added by migration 0013.
+    confirmed_by_name: Mapped[str | None]
     created_at: Mapped[dt.datetime | None] = mapped_column(server_default=func.now())
 
 

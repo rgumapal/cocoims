@@ -55,7 +55,7 @@ export default function StockExplorerPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Stock Explorer"
-        description="Current stock, FEFO ageing, and Excess %/Run Outs for any branch and item."
+        description="Look up any branch and item to see its current stock balance, how that stock breaks down by production date (oldest-first for shelf-life items), and whether deliveries are running short (Run Outs) or in excess of what sold. Every figure here is computed live from the movement ledger, not a cached snapshot."
       />
       <div className="flex flex-wrap items-end gap-3 border-b border-border px-4 py-3">
         <Field label="Branch" htmlFor="loc">

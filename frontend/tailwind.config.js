@@ -28,6 +28,9 @@ export default {
         "accent-fg": "var(--accent-fg)",
         "accent-subtle": "var(--accent-subtle)",
 
+        "header-bg": "var(--header-bg)",
+        "header-fg": "var(--header-fg)",
+
         positive: "var(--positive)",
         attention: "var(--attention)",
         negative: "var(--negative)",

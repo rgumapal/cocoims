@@ -1,10 +1,13 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { apiGet, apiPost } from "@/api/client";
-import type { Item, Location, Page, StockMovement } from "@/api/types";
+import type { Item, Location, Page, SalesLine } from "@/api/types";
+import { useAuth } from "@/auth/AuthContext";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { formatDateTime, todayLocalDate } from "@/lib/date";
 
 interface LineDraft {
   item_code: string;
@@ -14,12 +17,41 @@ interface LineDraft {
 
 const emptyLine = (): LineDraft => ({ item_code: "", qty: "", sold_out: false });
 
+// "50.000" -> "50", "50.500" -> "50.5" — a NUMERIC(12,3) column's stored
+// scale is a storage detail, not something a cashier needs to see.
+function formatQty(qty: string): string {
+  const n = Number(qty);
+  return Number.isFinite(n) ? String(n) : qty;
+}
+
+function formatMoney(value: string | null): string {
+  if (value === null) return "—";
+  const n = Number(value);
+  return Number.isFinite(n) ? `₱${n.toFixed(2)}` : "—";
+}
+
+function linesFromServer(saved: SalesLine[]): LineDraft[] {
+  return saved.length > 0
+    ? saved.map((l) => ({ item_code: l.item_code, qty: formatQty(l.qty), sold_out: l.sold_out }))
+    : [emptyLine()];
+}
+
 export default function SalesPage() {
-  const [locationCode, setLocationCode] = useState("");
-  const [businessDate, setBusinessDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const { me } = useAuth();
+  const queryClient = useQueryClient();
+
+  const [locationCode, setLocationCode] = useState(() =>
+    !me?.unrestricted && me?.location_scope.length === 1 ? me.location_scope[0]! : "",
+  );
+  const [businessDate, setBusinessDate] = useState(todayLocalDate);
+  const [confirmedByName, setConfirmedByName] = useState("");
   const [lines, setLines] = useState<LineDraft[]>([emptyLine()]);
   const [error, setError] = useState<string | null>(null);
-  const [confirmed, setConfirmed] = useState<StockMovement[] | null>(null);
+  // Locked ("already saved") whenever the loaded day already has entries
+  // on file — an explicit Edit click unlocks it. A fresh day with nothing
+  // on file starts unlocked. Same pattern as ReceivingPage.
+  const [isEditing, setIsEditing] = useState(true);
+  const [syncedFor, setSyncedFor] = useState<string | null>(null);
 
   const { data: locations } = useQuery({
     queryKey: ["locations-picker"],
@@ -30,23 +62,51 @@ export default function SalesPage() {
     queryFn: () => apiGet<Page<Item>>("/api/v1/items?limit=200"),
   });
 
-  const submitMutation = useMutation({
+  // sys_admin (unrestricted) sees every branch; anyone else sees only
+  // their effective scope — already flattened to individual branch codes
+  // regardless of whether the underlying grant was branch-, area-,
+  // cluster- or route-level (see /auth/me).
+  const availableLocations = (locations?.items ?? []).filter(
+    (l) => me?.unrestricted || me?.location_scope.includes(l.location_code),
+  );
+
+  const salesKey = locationCode && businessDate ? `${locationCode}|${businessDate}` : null;
+  const { data: existingLines, isFetching: isLoadingExisting } = useQuery({
+    queryKey: ["sales", locationCode, businessDate],
+    queryFn: () =>
+      apiGet<SalesLine[]>(
+        `/api/v1/sales?location_code=${encodeURIComponent(locationCode)}&business_date=${businessDate}`,
+      ),
+    enabled: !!salesKey,
+  });
+
+  // useEffect, not a render-time guard — keeps the sync cleanly separate
+  // from isEditing's other trigger (the Edit button's click handler); the
+  // syncedFor check still no-ops on every background refetch of the same
+  // key, so a new existingLines array reference never re-locks a day the
+  // user is actively editing.
+  useEffect(() => {
+    if (!salesKey || existingLines === undefined || salesKey === syncedFor) return;
+    setLines(linesFromServer(existingLines));
+    setIsEditing(existingLines.length === 0);
+    setSyncedFor(salesKey);
+  }, [salesKey, existingLines, syncedFor]);
+
+  const saveMutation = useMutation({
     mutationFn: () =>
-      apiPost<StockMovement[]>("/api/v1/sales", {
+      apiPost<SalesLine[]>("/api/v1/sales", {
         business_date: businessDate,
         location_code: locationCode,
+        confirmed_by_name: confirmedByName || null,
         lines: lines
           .filter((l) => l.item_code && l.qty)
-          .map((l) => ({
-            item_code: l.item_code,
-            qty: l.qty,
-            sold_out: l.sold_out,
-          })),
+          .map((l) => ({ item_code: l.item_code, qty: l.qty, sold_out: l.sold_out })),
       }),
-    onSuccess: (movements) => {
+    onSuccess: (saved) => {
       setError(null);
-      setConfirmed(movements);
-      setLines([emptyLine()]);
+      setLines(linesFromServer(saved));
+      setIsEditing(false);
+      void queryClient.invalidateQueries({ queryKey: ["sales", locationCode, businessDate] });
     },
     onError: (err) => setError(err instanceof Error ? err.message : "Could not record sales"),
   });
@@ -55,17 +115,52 @@ export default function SalesPage() {
     setLines(lines.map((l, i) => (i === index ? { ...l, ...patch } : l)));
   }
 
+  function removeLine(index: number): void {
+    const remaining = lines.filter((_, i) => i !== index);
+    setLines(remaining.length > 0 ? remaining : [emptyLine()]);
+  }
+
+  function cancelEditing(): void {
+    setLines(linesFromServer(existingLines ?? []));
+    setError(null);
+    setIsEditing(false);
+  }
+
+  const usedItemCodes = new Set(lines.map((l) => l.item_code).filter(Boolean));
+  const isSaved = !isEditing && (existingLines?.length ?? 0) > 0;
+
+  // Price for display: falls back to the item master's network price
+  // (items query, already loaded) so a newly-picked line prices itself
+  // immediately, then prefers the branch-effective price from
+  // existingLines once that's loaded — v_effective_price resolves a
+  // branch override over the network price, so it's the more accurate
+  // number whenever it's available.
+  const priceByItem = new Map<string, string | null>();
+  for (const it of items?.items ?? []) {
+    if (it.network_srp !== null) priceByItem.set(it.item_code, it.network_srp);
+  }
+  for (const l of existingLines ?? []) {
+    priceByItem.set(l.item_code, l.unit_price);
+  }
+  const activeLines = lines.filter((l) => l.item_code && l.qty);
+  const totalItemCount = activeLines.length;
+  const totalQty = activeLines.reduce((sum, l) => sum + (Number(l.qty) || 0), 0);
+  const totalSales = activeLines.reduce((sum, l) => {
+    const price = priceByItem.get(l.item_code);
+    return price !== null && price !== undefined ? sum + (Number(l.qty) || 0) * Number(price) : sum;
+  }, 0);
+
   return (
-    <div className="mx-auto max-w-2xl p-4">
+    <div className="mx-auto max-w-3xl p-4">
       <PageHeader
         title="Sales"
-        description="Record what sold today, and flag any item that ran out."
+        description="Log what sold at this branch today. Reopen an earlier date to correct it — your change is recorded as an adjustment, the original entry is never lost."
       />
 
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          submitMutation.mutate();
+          saveMutation.mutate();
         }}
         className="flex flex-col gap-4 p-4"
       >
@@ -76,9 +171,10 @@ export default function SalesPage() {
               required
               value={locationCode}
               onChange={(e) => setLocationCode(e.target.value)}
+              disabled={!me?.unrestricted && availableLocations.length <= 1}
             >
               <option value="">Select…</option>
-              {locations?.items.map((l) => (
+              {availableLocations.map((l) => (
                 <option key={l.location_code} value={l.location_code}>
                   {l.location_code} — {l.location_name}
                 </option>
@@ -96,80 +192,193 @@ export default function SalesPage() {
           </Field>
         </div>
 
-        <div>
-          <h2 className="mb-2 font-ui text-h2 text-text">Lines</h2>
-          <div className="flex flex-col gap-2">
-            {lines.map((line, i) => (
-              <div key={i} className="flex flex-wrap items-end gap-2">
-                <Field label="Item" htmlFor={`s_line_item_${i}`}>
-                  <Select
-                    id={`s_line_item_${i}`}
-                    required
-                    value={line.item_code}
-                    onChange={(e) => updateLine(i, { item_code: e.target.value })}
-                    className="w-56"
-                  >
-                    <option value="">Select…</option>
-                    {items?.items.map((it) => (
-                      <option key={it.item_code} value={it.item_code}>
-                        {it.item_code} — {it.display_name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label="Qty sold" htmlFor={`s_line_qty_${i}`}>
-                  <Input
-                    id={`s_line_qty_${i}`}
-                    type="number"
-                    step="0.001"
-                    min="0.001"
-                    required
-                    value={line.qty}
-                    onChange={(e) => updateLine(i, { qty: e.target.value })}
-                    className="w-24"
-                  />
-                </Field>
-                <label
-                  htmlFor={`s_line_soldout_${i}`}
-                  className="mb-1.5 flex items-center gap-1.5 font-ui text-body text-text"
-                >
-                  <input
-                    id={`s_line_soldout_${i}`}
-                    type="checkbox"
-                    checked={line.sold_out}
-                    onChange={(e) => updateLine(i, { sold_out: e.target.checked })}
-                  />
-                  Ran out
-                </label>
-                {lines.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setLines(lines.filter((_, idx) => idx !== i))}
-                    className="mb-1.5 font-ui text-small text-negative hover:underline"
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-          <Button type="button" onClick={() => setLines([...lines, emptyLine()])} className="mt-2">
-            Add line
-          </Button>
-        </div>
-
-        {error && <p className="font-ui text-small text-negative">{error}</p>}
-        {confirmed && (
-          <p className="font-ui text-small text-positive">
-            Recorded {confirmed.length} line{confirmed.length === 1 ? "" : "s"}.
+        <Field label="Cashier (optional, if different from your own account)" htmlFor="s_confirmed_by">
+          <Input
+            id="s_confirmed_by"
+            placeholder="e.g. the cashier who rang these up"
+            value={confirmedByName}
+            onChange={(e) => setConfirmedByName(e.target.value)}
+            className="max-w-sm"
+            disabled={isSaved}
+          />
+        </Field>
+        {me && (
+          <p className="-mt-2 font-ui text-micro text-text-3">
+            Recorded under your account ({me.full_name}) regardless of who you name above.
           </p>
         )}
 
+        {salesKey ? (
+        <>
         <div>
-          <Button type="submit" variant="primary" disabled={submitMutation.isPending}>
-            {submitMutation.isPending ? "Recording…" : "Record sales"}
-          </Button>
+          <div className="mb-2 flex items-center gap-2">
+            <h2 className="font-ui text-h2 text-text">Items</h2>
+            {isLoadingExisting && (
+              <span className="font-ui text-micro text-text-3">Loading what's on file…</span>
+            )}
+            {isSaved && <Badge tone="positive">Saved</Badge>}
+          </div>
+          <div className="overflow-hidden rounded-md border border-border">
+            <table className="w-full border-collapse">
+              <thead className="bg-surface-2">
+                <tr>
+                  <th className="px-3 py-2 text-left font-dense text-micro uppercase tracking-[0.06em] text-text-2">
+                    Item
+                  </th>
+                  <th className="w-24 px-3 py-2 text-left font-dense text-micro uppercase tracking-[0.06em] text-text-2">
+                    Qty sold
+                  </th>
+                  <th className="w-24 px-3 py-2 text-left font-dense text-micro uppercase tracking-[0.06em] text-text-2">
+                    Price
+                  </th>
+                  <th className="w-28 px-3 py-2 text-left font-dense text-micro uppercase tracking-[0.06em] text-text-2">
+                    Total
+                  </th>
+                  <th className="px-3 py-2 text-left font-dense text-micro uppercase tracking-[0.06em] text-text-2">
+                    Ran out?
+                  </th>
+                  <th className="px-3 py-2 text-left font-dense text-micro uppercase tracking-[0.06em] text-text-2">
+                    Last updated by
+                  </th>
+                  {isEditing && <th className="w-16 px-3 py-2" />}
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((line, i) => {
+                  const priced = priceByItem.get(line.item_code);
+                  const lineTotal =
+                    priced !== undefined && priced !== null && line.qty
+                      ? (Number(line.qty) * Number(priced)).toFixed(2)
+                      : null;
+                  const original = existingLines?.find((l) => l.item_code === line.item_code);
+                  return (
+                    <tr key={i} className="border-t border-border">
+                      <td className="px-3 py-1.5">
+                        <Select
+                          required
+                          value={line.item_code}
+                          onChange={(e) => updateLine(i, { item_code: e.target.value })}
+                          disabled={!isEditing}
+                          className="w-full"
+                        >
+                          <option value="">Select…</option>
+                          {items?.items
+                            .filter((it) => it.item_code === line.item_code || !usedItemCodes.has(it.item_code))
+                            .map((it) => (
+                              <option key={it.item_code} value={it.item_code}>
+                                {it.item_code} — {it.display_name}
+                              </option>
+                            ))}
+                        </Select>
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <Input
+                          type="number"
+                          step="0.001"
+                          min="0"
+                          required
+                          value={line.qty}
+                          onChange={(e) => updateLine(i, { qty: e.target.value })}
+                          disabled={!isEditing}
+                          className="w-full font-data tabular-nums"
+                        />
+                      </td>
+                      <td className="px-3 py-1.5 font-data text-body tabular-nums text-text-2">
+                        {priced !== undefined ? formatMoney(priced) : "—"}
+                      </td>
+                      <td className="px-3 py-1.5 font-data text-body tabular-nums text-text">
+                        {lineTotal !== null ? formatMoney(lineTotal) : "—"}
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <label className="flex items-center gap-1.5 font-ui text-body text-text">
+                          <input
+                            type="checkbox"
+                            checked={line.sold_out}
+                            onChange={(e) => updateLine(i, { sold_out: e.target.checked })}
+                            disabled={!isEditing}
+                          />
+                          Ran out
+                        </label>
+                      </td>
+                      <td className="px-3 py-1.5 font-ui text-small text-text-2">
+                        {original ? (
+                          <>
+                            {original.confirmed_by_full_name ?? "—"}
+                            <span className="block text-micro text-text-3">
+                              {formatDateTime(original.updated_at)}
+                            </span>
+                          </>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      {isEditing && (
+                        <td className="px-3 py-1.5 text-right">
+                          <button
+                            type="button"
+                            onClick={() => removeLine(i)}
+                            className="font-ui text-small text-negative hover:underline"
+                          >
+                            Remove
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+              {activeLines.length > 0 && (
+                <tfoot className="border-t border-border-strong bg-surface-2">
+                  <tr>
+                    <td className="px-3 py-2 font-ui text-small font-medium text-text">
+                      {totalItemCount} item{totalItemCount === 1 ? "" : "s"}
+                    </td>
+                    <td className="px-3 py-2 font-data text-body font-medium tabular-nums text-text">
+                      {formatQty(String(totalQty))}
+                    </td>
+                    <td />
+                    <td className="px-3 py-2 font-data text-body font-medium tabular-nums text-text">
+                      {formatMoney(totalSales.toFixed(2))}
+                    </td>
+                    <td colSpan={isEditing ? 3 : 2} />
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+          {isEditing && (
+            <Button type="button" onClick={() => setLines([...lines, emptyLine()])} className="mt-2">
+              Add Item
+            </Button>
+          )}
         </div>
+
+        {error && <p className="font-ui text-small text-negative">{error}</p>}
+
+        <div className="flex items-center gap-2">
+          {isSaved ? (
+            <Button type="button" variant="primary" onClick={() => setIsEditing(true)}>
+              Edit
+            </Button>
+          ) : (
+            <>
+              <Button type="submit" variant="primary" disabled={saveMutation.isPending}>
+                {saveMutation.isPending ? "Saving…" : "Record sales"}
+              </Button>
+              {(existingLines?.length ?? 0) > 0 && (
+                <Button type="button" onClick={cancelEditing} disabled={saveMutation.isPending}>
+                  Cancel
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+        </>
+        ) : (
+          <p className="font-ui text-small text-text-2">
+            Select a branch and business date to view or record sales.
+          </p>
+        )}
       </form>
     </div>
   );

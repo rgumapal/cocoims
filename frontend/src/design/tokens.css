@@ -37,6 +37,16 @@
   --red-500: #b3261e;
   --red-400: #e0574e;
 
+  /* Header chrome is a deliberate exception to the "tokens flip per theme"
+     rule below: fixed across both light and dark per explicit instruction,
+     since it's brand chrome (the top bar), not content — everything else
+     in the app still follows theme. NOTE: #FEEECC on #C05232 measures
+     ~4.1:1 contrast, just under the 4.5:1 AA floor CLAUDE.md requires for
+     normal-size text; flagged, not fixed, since the exact hex values were
+     specified directly. */
+  --header-bg: #c05232;
+  --header-fg: #feeecc;
+
   --r-sm: 4px;
   --r-md: 6px;
   --r-lg: 10px;

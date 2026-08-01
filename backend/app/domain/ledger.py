@@ -190,6 +190,7 @@ def write_movement(
     counterparty_location: str | None = None,
     source_code: str | None = None,
     idempotency_key: str | None = None,
+    confirmed_by_name: str | None = None,
 ) -> StockMovement:
     """Inserts one core.stock_movement row. The only place application code
     should do this — receiving/waste/transfers/adjustments all call this
@@ -239,6 +240,7 @@ def write_movement(
         source_code=source_code,
         idempotency_key=idempotency_key,
         created_by=created_by,
+        confirmed_by_name=confirmed_by_name,
     )
     session.add(movement)
     session.flush()

@@ -106,6 +106,26 @@ def resolve_effective_scope(session: Session, user_id: int) -> tuple[bool, list[
     return False, location_codes
 
 
+def get_user_permissions(session: Session, user_id: int) -> set[str]:
+    """The caller's full flattened permission set — every permission_code
+    granted through any role they hold. Shared by GET /auth/me and the
+    dashboard summary endpoint (app/api/v1/dashboard.py), which needs to
+    check several permissions per request and would otherwise repeat this
+    query once per section (exactly the N+1 pattern CLAUDE.md forbids).
+    """
+    return {
+        row[0]
+        for row in session.execute(
+            text(
+                "SELECT DISTINCT rp.permission_code FROM core.user_role ur "
+                "JOIN core.role_permission rp ON rp.role_code = ur.role_code "
+                "WHERE ur.user_id = :uid"
+            ),
+            {"uid": user_id},
+        ).all()
+    }
+
+
 def get_db(
     user: AppUser = Depends(get_current_user),
     x_request_id: str | None = Header(default=None, alias="X-Request-Id"),

@@ -39,7 +39,7 @@ export default function BranchesListPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Branches"
-        description="Every Cocopan branch, its status, and who manages it."
+        description="Every Cocopan branch — its status, area/cluster/route assignment, and the Operations Manager responsible for it. Status drives whether a branch can be ordered for and forecasted; every change here is logged to its status history, never overwritten."
       />
       <div className="flex-1 overflow-hidden">
         <DataTable
