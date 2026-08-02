@@ -19,6 +19,9 @@ Frontend: React 18 / Vite / TypeScript / TanStack Table / Tailwind.
   different facts. The single most important rule in the system.
 - `core.stock_movement` is append-only. No UPDATE/DELETE; corrections are
   offsetting movements.
+- Transfers: lot identity survives the trip — the destination movement
+  copies the source lot's production/expiry date, never today's date.
+  In-transit always nets to zero once a transfer is fully received.
 - `core.order_line` column names mirror the client's spreadsheet headers exactly.
   Do not rename for elegance — adoption depends on matching vocabulary.
 - Quantities are NUMERIC, never FLOAT.

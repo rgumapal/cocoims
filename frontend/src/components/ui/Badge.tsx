@@ -40,6 +40,11 @@ const STATUS_TONES: Record<string, BadgeTone> = {
   RELOCATED: "neutral",
   DELISTED: "negative",
   CLOSED: "negative",
+  // core.transfer_status (docs/features/TRANSFERS_V1.md)
+  DRAFT: "neutral",
+  IN_TRANSIT: "attention",
+  RECEIVED: "positive",
+  CANCELLED: "negative",
 };
 
 export function StatusBadge({ status }: { status: string }) {

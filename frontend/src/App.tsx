@@ -17,6 +17,7 @@ const StockExplorerPage = lazy(() => import("@/routes/stock/StockExplorerPage"))
 const CountsListPage = lazy(() => import("@/routes/counts/CountsListPage"));
 const CountDetailPage = lazy(() => import("@/routes/counts/CountDetailPage"));
 const ReceivingPage = lazy(() => import("@/routes/receiving/ReceivingPage"));
+const TransfersListPage = lazy(() => import("@/routes/transfers/TransfersListPage"));
 const SalesPage = lazy(() => import("@/routes/sales/SalesPage"));
 const WastePage = lazy(() => import("@/routes/waste/WastePage"));
 const UsersListPage = lazy(() => import("@/routes/users/UsersListPage"));
@@ -60,6 +61,7 @@ export function App() {
           <Route path="/counts/:countId" element={<CountDetailPage />} />
 
           <Route path="/receiving" element={<ReceivingPage />} />
+          <Route path="/transfers" element={<TransfersListPage />} />
           <Route path="/sales" element={<SalesPage />} />
           <Route path="/waste" element={<WastePage />} />
 

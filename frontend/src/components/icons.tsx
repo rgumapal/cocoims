@@ -44,6 +44,15 @@ export function WasteIcon() {
   );
 }
 
+export function TransfersIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2.5 6h9.5M9.5 3l2.5 3-2.5 3" />
+      <path d="M15.5 12H6M8.5 9l-2.5 3 2.5 3" />
+    </svg>
+  );
+}
+
 export function CountsIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">

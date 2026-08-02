@@ -267,9 +267,35 @@ export interface StockMovement {
   source_code: string | null;
 }
 
-export interface TransferResponse {
-  transfer_out: StockMovement;
-  transfer_in: StockMovement;
+// docs/features/TRANSFERS_V1.md — mirrors backend/app/api/v1/transfers.py's
+// TransferLineOut/TransferOut/TransferDetail field-for-field.
+export interface TransferLine {
+  item_code: string;
+  qty_requested: string;
+  qty_shipped: string | null;
+  qty_received: string | null;
+  variance_qty: string | null;
+  variance_reason_code: string | null;
+}
+
+export interface Transfer {
+  transfer_id: number;
+  transfer_no: string | null;
+  source_location_code: string;
+  dest_location_code: string;
+  status: "DRAFT" | "IN_TRANSIT" | "RECEIVED" | "CANCELLED";
+  reason_code: string | null;
+  notes: string | null;
+  created_by: number | null;
+  created_at: string | null;
+  shipped_at: string | null;
+  received_at: string | null;
+  cancelled_at: string | null;
+}
+
+export interface TransferDetail extends Transfer {
+  lines: TransferLine[];
+  warnings: string[];
 }
 
 // GET/POST /api/v1/receiving both return this shape — the *net* quantity

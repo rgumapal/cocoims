@@ -186,9 +186,14 @@ transitions with full history, OM assignment, closures), six reference
 tables (categories/uom/clusters/areas/routes/reason-codes), stock (balance
 + FEFO ageing, paginated ledger, manual adjustments), receiving and sales
 (diff-based edits against the append-only ledger — editing a saved day
-writes a signed correction, never an UPDATE/DELETE), waste, transfers, and
-physical counts (with separation-of-duties on approval). 18 backend tests,
-all passing. See `backend/app/api/v1/` and `backend/tests/`.
+writes a signed correction, never an UPDATE/DELETE), waste, and physical
+counts (with separation-of-duties on approval). Transfers
+(`docs/features/TRANSFERS_V1.md`): branch-to-branch rebalance with a real
+DRAFT → IN_TRANSIT → RECEIVED state machine, a genuine in-transit ledger
+leg (stock never vanishes mid-trip), FEFO lot identity preserved end to
+end, and idempotent ship/receive — replaced an earlier single-endpoint
+prototype that had none of that and no UI caller. 37 backend tests, all
+passing. See `backend/app/api/v1/` and `backend/tests/`.
 
 **Not yet built**: forecast engine, replenishment ladder, AC-1 calibration,
 accuracy/bias analytics, the order run / Exception Workbench, file-ingest
@@ -199,8 +204,8 @@ through it.
 **Frontend**: React 18 + Vite + TypeScript (strict) + Tailwind, design
 tokens from SPEC §12.2 verbatim, TanStack Query/Table. Screens: login,
 dashboard, items, branches, reference data, stock explorer, counts,
-receiving, sales, waste log, users & roles — the same surface the backend
-exposes above.
+receiving, sales, waste log, transfers, users & roles — the same surface
+the backend exposes above.
 
 **Deployment**: both services run on Cloud Run (`cocoims-api`,
 `cocoims-web`) behind the custom domain `cims.rgsuite.net`, built via
@@ -224,7 +229,7 @@ cocopan-ims/
 │   │   ├── api/v1/        # routers: dashboard, items, locations, refdata, stock, receiving, sales, waste, transfers, counts, users
 │   │   ├── auth/           # Firebase verification/provisioning, JWT fallback, permission + scope dependencies
 │   │   ├── core/           # settings, DB engine/session, RLS session-context plumbing
-│   │   ├── domain/         # ledger.py — balance, FEFO ageing, write_movement
+│   │   ├── domain/         # ledger.py (balance, FEFO ageing, write_movement), transfer.py
 │   │   └── models/         # SQLAlchemy models mirroring db/ddl
 │   ├── alembic/           # migrations — the source of truth for schema history
 │   ├── scripts/            # set_dev_passwords.py (dormant-fallback only), seed_sample_data.py (dev-only)

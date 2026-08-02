@@ -11,6 +11,7 @@ import {
   RefDataIcon,
   SalesIcon,
   StockIcon,
+  TransfersIcon,
   UsersIcon,
   WasteIcon,
 } from "@/components/icons";
@@ -51,6 +52,7 @@ const NAV_GROUPS: { label: string; links: NavLinkItem[] }[] = [
       { to: "/receiving", label: "Receiving", icon: ReceivingIcon },
       { to: "/sales", label: "Sales", icon: SalesIcon },
       { to: "/waste", label: "Waste Log", icon: WasteIcon },
+      { to: "/transfers", label: "Transfers", icon: TransfersIcon },
     ],
   },
   {

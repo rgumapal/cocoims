@@ -1,8 +1,15 @@
 # Cocopan Inventory Management System (CIMS)
 ## Complete System Specification
 
-**Version:** 3.3
-**Supersedes:** SPEC v3.2
+**Version:** 3.4
+**Supersedes:** SPEC v3.3
+**Changes in 3.4:** Transfers built to docs/features/TRANSFERS_V1.md's
+prototype scope — §0 status, §7.3 permission matrix, §12.7 screens, §13 API
+surface and a new §14 AC-5 all updated to match. Replaces the single-endpoint
+prototype the API surface previously showed (no in-transit leg, no UI
+caller) with the real design: a DRAFT → IN_TRANSIT → RECEIVED state machine,
+a real in-transit ledger location, FEFO lot identity preserved end to end,
+and idempotent ship/receive.
 **Changes in 3.3:** Token CSS extracted to `frontend/src/design/tokens.css`
 (§12.2 now carries the rationale and points at the file, same pattern as the
 v3.1 DDL extraction — the CSS file is authoritative). Appendix CLAUDE.md
@@ -40,8 +47,9 @@ right now" is the more current source when the two disagree.
 |---|---|
 | §4 Data model, §5 Branch/reference data | Built — full schema, RLS, RBAC. Onboarding wizard (§5.2) and assortment templates (§5.5) are not. |
 | §7 Roles and permissions | Built — API-layer permission checks + DB-layer RLS, per §7.4. |
-| §12 UX and design system | Built for every shipped screen (login, dashboard, items, branches, reference data, stock explorer, counts, receiving, sales, waste log, users & roles). |
+| §12 UX and design system | Built for every shipped screen (login, dashboard, items, branches, reference data, stock explorer, counts, receiving, sales, waste log, transfers, users & roles). |
 | §13 API surface | Partial — see the status note at the top of that section. |
+| Transfers (docs/features/TRANSFERS_V1.md) | Built — branch-to-branch rebalance with a real in-transit ledger leg, FEFO lot identity, idempotent ship/receive. Prototype scope only: no approval workflow, no forecast/ladder integration, no suggested transfers (see that doc's "Deferred to TRANSFERS_ROADMAP.md"). |
 | §8 Forecast engine, §9 Replenishment engine, §10 Accuracy and bias | Not built. No calibration against §14 AC-1 has happened yet. |
 | §11 Integration layer | Not built. Manual entry (receiving/sales/waste screens) covers the ledger for now instead. |
 | Auth | Built, but not as specced in §7/§13: Firebase Auth (Google + email/password), admin-provisioned accounts only, not the bcrypt-only flow those sections describe. See CLAUDE.md's auth notes. |
@@ -648,6 +656,10 @@ The API resolves this once per session, caches it in Redis, and sets `app.locati
 | `receiving.confirm` | ✓ | — | — | ✓ | — | ✓ | ✓ | — | — |
 | `waste.record` | ✓ | — | — | ✓ | — | ✓ | ✓ | — | — |
 | `movement.adjust` | ✓ | ✓ | — | ✓ | — | — | — | — | — |
+| `transfer.read` | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ | — | — |
+| `transfer.create` | ✓ | ✓ | — | ✓ | ✓ | ✓ | — | — | — |
+| `transfer.ship` / `transfer.receive` | ✓ | — | — | ✓ | — | ✓ | ✓ | — | — |
+| `transfer.cancel` | ✓ | ✓ | — | ✓ | ✓ | ✓ | — | — | — |
 | `accuracy.read` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ |
 | `user.manage` / `role.manage` | ✓ | — | — | — | — | — | — | — | — |
 | `audit.read` | ✓ | ✓ | — | — | — | — | — | — | ✓ |
@@ -922,6 +934,7 @@ Single fixed top bar, collapsible left nav, content maximised. No nested panels 
 | Counts | Store Head, Store Team, OM | Guided count entry, mobile-first, under 3 minutes |
 | Receiving | Store Head, Store Team | Confirm delivery, capture discrepancies |
 | Waste Log | Store Head, Store Team, OM | Quantity + reason code |
+| Transfers | All (read); Store Head, Store Team, OM, Area Head create/cancel; Store Head, Store Team, OM ship/receive | List (Inbound/Outbound, status), detail drawer, mobile-first Ship and Receive flows — docs/features/TRANSFERS_V1.md |
 | Items | Sys Admin, Planner | CRUD, aliases, prices, MOQ, shelf life, lifecycle |
 | Branches | Sys Admin, Planner | List, lifecycle status, OM assignment, bulk actions |
 | Branch Onboarding | Sys Admin, Planner | Guided 8-step wizard (§5.2), resumable |
@@ -952,10 +965,13 @@ auth is Firebase-based in practice (`POST /api/v1/auth/firebase`; the
 longer calls, kept for admin/scripting use), and there's a `GET
 /api/v1/dashboard` endpoint not listed here at all (one permission-gated
 aggregate read per nav screen, powering the post-login landing page).
-Locations' onboarding wizard, assortment templates, `params`, and
-`geography` are not built. Replenishment / Analytics / Admin & integration
-/ Inbound integration are entirely spec-only — nothing in those four groups
-exists yet.
+Transfers is its own group below, built to docs/features/TRANSFERS_V1.md's
+prototype scope (not the fuller `assortment`/schedule-adjacent shape §2.1
+originally implied) — it replaced an earlier single-endpoint prototype
+that had no in-transit leg and no UI caller. Locations' onboarding wizard,
+assortment templates, `params`, and `geography` are not built.
+Replenishment / Analytics / Admin & integration / Inbound integration are
+entirely spec-only — nothing in those four groups exists yet.
 
 ```
 POST   /api/v1/auth/login | refresh | logout
@@ -992,7 +1008,15 @@ GET             /api/v1/stock?location=&item=&as_of=
 GET             /api/v1/stock/movements
 POST            /api/v1/stock/movements          # manual adjustment, reason required
 POST            /api/v1/counts | /counts/{id}/submit
-POST            /api/v1/receiving | /waste | /transfers
+POST            /api/v1/receiving | /waste
+
+# Transfers — docs/features/TRANSFERS_V1.md (branch-to-branch rebalance, prototype scope)
+GET             /api/v1/transfers?status=&location=&direction=inbound|outbound&cursor=
+POST            /api/v1/transfers                 # create draft, returns validation flags
+GET             /api/v1/transfers/{id}
+POST            /api/v1/transfers/{id}/ship       # per-line qty_shipped -> FEFO allocation
+POST            /api/v1/transfers/{id}/receive    # per-line qty_received + variance reasons
+POST            /api/v1/transfers/{id}/cancel
 
 # Replenishment
 POST            /api/v1/forecast/runs
@@ -1060,6 +1084,15 @@ Until this passes, enable no improvements. Reproducing their current answers is 
 - Rung attribution shows peso contribution per adjustment step
 - **Enabling carryover for MULTI_DAY SKUs demonstrably reduces simulated excess versus the as-is baseline — this is the headline demo**
 - MOQ exception report lists every item/location where MOQ exceeds 3× daily demand
+
+### AC-5 Transfers (prototype scope — docs/features/TRANSFERS_V1.md)
+- Ship then receive equal quantities: source down, destination up, in-transit exactly zero, four ledger rows, no stored balance mutated
+- Destination lot carries the **source's** production/expiry date, never today's date; a line spanning two lots posts two movement rows, oldest lot first
+- Short or over receipt: `variance_reason_code` required, the difference posts as its own adjustment against in-transit so that bucket still nets to zero
+- Replaying ship and receive with the same `Idempotency-Key` posts nothing extra
+- A `shelf_life_days = 0` item cannot be received on a different business date than it shipped on
+- An OM cannot ship from or receive into a branch outside scope, but **can** read a transfer where only one side is theirs — verified at the **database** layer with the API bypassed
+- Transferred units appear in neither `sales_qty` nor excess at either branch
 
 ---
 

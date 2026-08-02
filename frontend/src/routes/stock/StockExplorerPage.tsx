@@ -9,6 +9,7 @@ import type {
   Page,
   StockBalance,
   StockMovement,
+  Transfer,
 } from "@/api/types";
 import { DataTable, NumericCell } from "@/components/DataTable";
 import { Badge } from "@/components/ui/Badge";
@@ -127,6 +128,36 @@ export default function StockExplorerPage() {
     enabled: Boolean(locationCode && itemCode),
   });
 
+  // docs/features/TRANSFERS_V1.md: "surface inbound in-transit on the
+  // existing stock/Stock Explorer read, so a Store Head sees '12 pan de
+  // coco arriving' without opening this feature." One extra query fetches
+  // each open inbound transfer's detail (the list this branch has open is
+  // typically small) and flattens it into a per-item total — a compact
+  // banner, not a full second table, since this screen's job is the
+  // ledger balance, not transfer administration (that's /transfers).
+  const { data: inboundByItem } = useQuery({
+    queryKey: ["stock-inbound-transfers", locationCode],
+    queryFn: async () => {
+      const list = await apiGet<Page<Transfer>>(
+        `/api/v1/transfers?location=${locationCode}&direction=inbound&status=IN_TRANSIT&limit=20`,
+      );
+      const details = await Promise.all(
+        list.items.map((t) => apiGet<{ lines: { item_code: string; qty_shipped: string | null }[] }>(
+          `/api/v1/transfers/${t.transfer_id}`,
+        )),
+      );
+      const totals = new Map<string, number>();
+      for (const detail of details) {
+        for (const line of detail.lines) {
+          if (line.qty_shipped === null) continue;
+          totals.set(line.item_code, (totals.get(line.item_code) ?? 0) + Number(line.qty_shipped));
+        }
+      }
+      return totals;
+    },
+    enabled: Boolean(locationCode),
+  });
+
   const selectedItem = locationStock?.find((row) => row.item_code === itemCode);
 
   function handleSelectLocation(code: string): void {
@@ -164,6 +195,17 @@ export default function StockExplorerPage() {
         </div>
       ) : (
         <div className="flex flex-1 flex-col overflow-auto p-4">
+          {inboundByItem && inboundByItem.size > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md bg-attention-bg px-3 py-2">
+              <Badge tone="attention">Inbound</Badge>
+              <span className="font-ui text-small text-text">
+                {[...inboundByItem.entries()]
+                  .map(([code, qty]) => `${formatQty(qty)} ${code}`)
+                  .join(", ")}{" "}
+                arriving from an in-transit transfer.
+              </span>
+            </div>
+          )}
           <div className="h-80 border border-border">
             <DataTable
               data={locationStock ?? []}
