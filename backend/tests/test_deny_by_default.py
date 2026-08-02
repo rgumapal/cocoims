@@ -4,8 +4,9 @@ auto_error=False + explicit check — see that module's docstring for why
 the default FastAPI behavior would conflate the two).
 """
 from fastapi.testclient import TestClient
+from sqlalchemy.engine import Connection
 
-from tests.conftest import auth_headers
+from tests.conftest import login_as_role
 
 # One representative endpoint per router, each requiring a different
 # permission — not exhaustive, but enough to catch a router that forgot to
@@ -30,9 +31,9 @@ def test_auth_me_requires_a_token(client: TestClient) -> None:
     assert response.status_code == 401
 
 
-def test_store_team_cannot_create_items(client: TestClient) -> None:
+def test_store_team_cannot_create_items(client: TestClient, db_connection: Connection) -> None:
     """STORE_TEAM holds item.read only (SPEC §7.3) — item.create must 403."""
-    headers = auth_headers(client, "om.north@cocopan.ph")  # OPS_MANAGER also lacks item.create
+    headers = login_as_role(db_connection, "OPS_MANAGER")  # OPS_MANAGER also lacks item.create
     response = client.post(
         "/api/v1/items",
         headers=headers,
@@ -47,19 +48,19 @@ def test_store_team_cannot_create_items(client: TestClient) -> None:
     assert response.status_code == 403
 
 
-def test_cx_specialist_cannot_manage_refdata(client: TestClient) -> None:
+def test_cx_specialist_cannot_manage_refdata(client: TestClient, db_connection: Connection) -> None:
     """refdata.manage is SYS_ADMIN/DEMAND_PLANNER only (SPEC §7.3 seed)."""
-    headers = auth_headers(client, "cx.lead@cocopan.ph")
+    headers = login_as_role(db_connection, "CX_SPECIALIST")
     response = client.post(
         "/api/v1/clusters", headers=headers, json={"cluster_code": "PYTEST_DENY", "label": "x"}
     )
     assert response.status_code == 403
 
 
-def test_cx_specialist_cannot_record_sales(client: TestClient) -> None:
+def test_cx_specialist_cannot_record_sales(client: TestClient, db_connection: Connection) -> None:
     """sales.record (migration 0010) is SYS_ADMIN/OPS_MANAGER/STORE_HEAD/
     STORE_TEAM only, mirroring waste.record — CX_SPECIALIST holds neither."""
-    headers = auth_headers(client, "cx.lead@cocopan.ph")
+    headers = login_as_role(db_connection, "CX_SPECIALIST")
     response = client.post(
         "/api/v1/sales",
         headers=headers,

@@ -5,22 +5,29 @@ CLAUDE.md calls "the single most important data rule in the system", so it
 gets the full round-trip, not a shortcut.
 """
 from fastapi.testclient import TestClient
+from sqlalchemy.engine import Connection
 
-from tests.conftest import auth_headers
+from tests.conftest import TEST_SENTINEL_DATE, login_as_role
 
 
 def _open_session(client: TestClient, headers: dict[str, str], count_type: str) -> int:
     response = client.post(
         "/api/v1/counts",
         headers=headers,
-        json={"location_code": "KLN", "count_type": count_type, "business_date": "2026-07-31"},
+        json={
+            "location_code": "KLN",
+            "count_type": count_type,
+            "business_date": str(TEST_SENTINEL_DATE),
+        },
     )
     assert response.status_code == 201, response.text
     return response.json()["count_id"]  # type: ignore[no-any-return]
 
 
-def test_counted_zero_is_distinct_from_not_counted(client: TestClient) -> None:
-    headers = auth_headers(client, "it.admin@cocopan.ph")
+def test_counted_zero_is_distinct_from_not_counted(client: TestClient, db_connection: Connection) -> None:
+    # STORE_TEAM holds count.submit (SPEC §7.3 seed) — see login_as_role's
+    # docstring for why this doesn't use a seeded email + bcrypt login.
+    headers = login_as_role(db_connection, "STORE_TEAM")
     count_id = _open_session(client, headers, "CYCLE")
 
     response = client.post(
@@ -51,12 +58,12 @@ def test_counted_zero_is_distinct_from_not_counted(client: TestClient) -> None:
     assert skipped["variance_qty"] is None
 
 
-def test_was_counted_survives_a_resubmit(client: TestClient) -> None:
+def test_was_counted_survives_a_resubmit(client: TestClient, db_connection: Connection) -> None:
     """Submitting a line again (the upsert path in submit_count_lines)
     must not silently flip was_counted based on whatever counted_qty
     happens to be — the two fields are independent inputs, not derived
     from each other."""
-    headers = auth_headers(client, "it.admin@cocopan.ph")
+    headers = login_as_role(db_connection, "STORE_TEAM")
     count_id = _open_session(client, headers, "DAILY_EI")
 
     client.post(

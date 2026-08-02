@@ -14,19 +14,27 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import DBAPIError
 
 from app.core.config import settings
+from tests.conftest import TEST_SENTINEL_DATE
 
 _app_engine = create_engine(settings.app_database_url)
 _owner_engine = create_engine(settings.database_url)
 
 
 def _seed_row(conn: Connection) -> None:
+    """Stamped with TEST_SENTINEL_DATE, and every UPDATE/DELETE below
+    filters on it too — not just item_code. If the protection this file
+    tests ever had a real gap, a WHERE clause scoped only to item_code
+    would mutate every real CP001 row in the shared Cloud SQL database,
+    not just this test's own; the sentinel date keeps the blast radius of
+    a genuine regression confined to rows no real workflow ever uses."""
     conn.execute(text("SELECT set_config('app.unrestricted', 'on', true)"))
     conn.execute(
         text(
             "INSERT INTO core.stock_movement "
             "(business_date, location_code, item_code, movement_type, qty, uom, source_code) "
-            "VALUES ('2026-07-31', 'CMSY-01', 'CP001', 'OPENING', 1, 'pc', 'MANUAL_UPLOAD')"
-        )
+            "VALUES (:d, 'CMSY-01', 'CP001', 'OPENING', 1, 'pc', 'MANUAL_UPLOAD')"
+        ),
+        {"d": TEST_SENTINEL_DATE},
     )
 
 
@@ -57,13 +65,19 @@ def owner_conn() -> Generator[Connection, None, None]:
 def test_app_role_cannot_update(app_role_conn: Connection) -> None:
     _seed_row(app_role_conn)
     with pytest.raises(DBAPIError, match="permission denied"):
-        app_role_conn.execute(text("UPDATE core.stock_movement SET qty = 99 WHERE item_code = 'CP001'"))
+        app_role_conn.execute(
+            text("UPDATE core.stock_movement SET qty = 99 WHERE item_code = 'CP001' AND business_date = :d"),
+            {"d": TEST_SENTINEL_DATE},
+        )
 
 
 def test_app_role_cannot_delete(app_role_conn: Connection) -> None:
     _seed_row(app_role_conn)
     with pytest.raises(DBAPIError, match="permission denied"):
-        app_role_conn.execute(text("DELETE FROM core.stock_movement WHERE item_code = 'CP001'"))
+        app_role_conn.execute(
+            text("DELETE FROM core.stock_movement WHERE item_code = 'CP001' AND business_date = :d"),
+            {"d": TEST_SENTINEL_DATE},
+        )
 
 
 def test_owning_superuser_still_cannot_update(owner_conn: Connection) -> None:
@@ -73,10 +87,16 @@ def test_owning_superuser_still_cannot_update(owner_conn: Connection) -> None:
     """
     _seed_row(owner_conn)
     with pytest.raises(DBAPIError, match="append-only"):
-        owner_conn.execute(text("UPDATE core.stock_movement SET qty = 99 WHERE item_code = 'CP001'"))
+        owner_conn.execute(
+            text("UPDATE core.stock_movement SET qty = 99 WHERE item_code = 'CP001' AND business_date = :d"),
+            {"d": TEST_SENTINEL_DATE},
+        )
 
 
 def test_owning_superuser_still_cannot_delete(owner_conn: Connection) -> None:
     _seed_row(owner_conn)
     with pytest.raises(DBAPIError, match="append-only"):
-        owner_conn.execute(text("DELETE FROM core.stock_movement WHERE item_code = 'CP001'"))
+        owner_conn.execute(
+            text("DELETE FROM core.stock_movement WHERE item_code = 'CP001' AND business_date = :d"),
+            {"d": TEST_SENTINEL_DATE},
+        )

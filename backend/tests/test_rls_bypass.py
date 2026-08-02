@@ -17,6 +17,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import ProgrammingError
 
 from app.core.config import settings
+from tests.conftest import TEST_SENTINEL_DATE
 
 _app_engine = create_engine(settings.app_database_url)
 
@@ -49,7 +50,11 @@ def _seed_movement(conn: Connection, location_code: str) -> None:
     """Inserted as an unrestricted, in-scope write first so each test's
     scope-restriction assertions run against real pre-existing data, not
     an empty table (an empty result could otherwise mean "correctly scoped"
-    or "nothing here at all" — indistinguishable)."""
+    or "nothing here at all" — indistinguishable). Stamped with
+    TEST_SENTINEL_DATE so the count assertions below only ever see this
+    row, not whatever real or sample-generator data already exists for
+    this branch in the shared Cloud SQL database (see CLAUDE.md's "Local
+    development database" — there is no empty per-test database here)."""
     _set_scope(conn, location_scope=[location_code], unrestricted=False)
     conn.execute(
         text(
@@ -57,7 +62,7 @@ def _seed_movement(conn: Connection, location_code: str) -> None:
             "(business_date, location_code, item_code, movement_type, qty, uom, source_code) "
             "VALUES (:d, :loc, 'CP001', 'OPENING', 1, 'pc', 'MANUAL_UPLOAD')"
         ),
-        {"d": "2026-07-31", "loc": location_code},
+        {"d": TEST_SENTINEL_DATE, "loc": location_code},
     )
 
 
@@ -66,7 +71,11 @@ def test_scoped_read_excludes_other_branches(app_role_conn: Connection) -> None:
 
     _set_scope(app_role_conn, location_scope=["CMSY-01"], unrestricted=False)
     visible = app_role_conn.execute(
-        text("SELECT count(*) FROM core.stock_movement WHERE location_code = 'KLN'")
+        text(
+            "SELECT count(*) FROM core.stock_movement "
+            "WHERE location_code = 'KLN' AND business_date = :d"
+        ),
+        {"d": TEST_SENTINEL_DATE},
     ).scalar_one()
     assert visible == 0
 
@@ -76,7 +85,11 @@ def test_scoped_read_includes_own_branch(app_role_conn: Connection) -> None:
 
     _set_scope(app_role_conn, location_scope=["KLN"], unrestricted=False)
     visible = app_role_conn.execute(
-        text("SELECT count(*) FROM core.stock_movement WHERE location_code = 'KLN'")
+        text(
+            "SELECT count(*) FROM core.stock_movement "
+            "WHERE location_code = 'KLN' AND business_date = :d"
+        ),
+        {"d": TEST_SENTINEL_DATE},
     ).scalar_one()
     assert visible == 1
 
@@ -88,8 +101,9 @@ def test_scoped_write_to_other_branch_rejected(app_role_conn: Connection) -> Non
             text(
                 "INSERT INTO core.stock_movement "
                 "(business_date, location_code, item_code, movement_type, qty, uom, source_code) "
-                "VALUES ('2026-07-31', 'KLN', 'CP001', 'OPENING', 1, 'pc', 'MANUAL_UPLOAD')"
-            )
+                "VALUES (:d, 'KLN', 'CP001', 'OPENING', 1, 'pc', 'MANUAL_UPLOAD')"
+            ),
+            {"d": TEST_SENTINEL_DATE},
         )
 
 
@@ -99,8 +113,9 @@ def test_scoped_write_to_own_branch_succeeds(app_role_conn: Connection) -> None:
         text(
             "INSERT INTO core.stock_movement "
             "(business_date, location_code, item_code, movement_type, qty, uom, source_code) "
-            "VALUES ('2026-07-31', 'KLN', 'CP001', 'OPENING', 1, 'pc', 'MANUAL_UPLOAD')"
-        )
+            "VALUES (:d, 'KLN', 'CP001', 'OPENING', 1, 'pc', 'MANUAL_UPLOAD')"
+        ),
+        {"d": TEST_SENTINEL_DATE},
     )  # no exception = pass
 
 
@@ -109,7 +124,11 @@ def test_unrestricted_scope_sees_every_branch(app_role_conn: Connection) -> None
 
     _set_scope(app_role_conn, location_scope=[], unrestricted=True)
     visible = app_role_conn.execute(
-        text("SELECT count(*) FROM core.stock_movement WHERE location_code = 'KLN'")
+        text(
+            "SELECT count(*) FROM core.stock_movement "
+            "WHERE location_code = 'KLN' AND business_date = :d"
+        ),
+        {"d": TEST_SENTINEL_DATE},
     ).scalar_one()
     assert visible == 1
 

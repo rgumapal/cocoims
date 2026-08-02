@@ -36,7 +36,6 @@ import argparse
 import datetime as dt
 import json
 import random
-import sys
 import uuid
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -322,7 +321,7 @@ def build_plan(
 
         ran_out = set(_share(rng, sorted(sellable), RAN_OUT_SHARE))
 
-        lines: list[SalesLine] = []
+        sale_lines: list[SalesLine] = []
         for item_code in sorted(sellable):
             delivered = branch_received[item_code].qty
             if item_code in ran_out:
@@ -333,12 +332,12 @@ def build_plan(
                 # Never negative: a small delivery with a large shortfall
                 # simply means nothing sold, not a negative sale.
                 qty = max(Decimal(0), delivered - shortfall)
-            lines.append(
+            sale_lines.append(
                 SalesLine(item_code=item_code, qty=qty, sold_out=item_code in ran_out)
             )
 
         for item_code in sorted(extra):
-            lines.append(
+            sale_lines.append(
                 SalesLine(
                     item_code=item_code,
                     qty=Decimal(rng.randint(*UNRECEIVED_SOLD_QTY)),
@@ -346,17 +345,17 @@ def build_plan(
                 )
             )
 
-        lines = [line for line in lines if line.qty > 0]
-        if not lines:
+        sale_lines = [line for line in sale_lines if line.qty > 0]
+        if not sale_lines:
             continue
-        plan.sales.append(BranchSales(location_code=branch, lines=lines))
-        sold[branch] = {line.item_code: line for line in lines}
+        plan.sales.append(BranchSales(location_code=branch, lines=sale_lines))
+        sold[branch] = {line.item_code: line for line in sale_lines}
 
     for branch in sorted(unreceived_branches):
         chosen = rng.sample(
             sorted(item_by_code), min(rng.randint(*SALES_EXTRA_ITEMS), len(item_by_code))
         )
-        lines = [
+        unreceived_sale_lines = [
             SalesLine(
                 item_code=item_code,
                 qty=Decimal(rng.randint(*UNRECEIVED_SOLD_QTY)),
@@ -364,8 +363,8 @@ def build_plan(
             )
             for item_code in sorted(chosen)
         ]
-        plan.sales.append(BranchSales(location_code=branch, lines=lines))
-        sold[branch] = {line.item_code: line for line in lines}
+        plan.sales.append(BranchSales(location_code=branch, lines=unreceived_sale_lines))
+        sold[branch] = {line.item_code: line for line in unreceived_sale_lines}
 
     # --- Waste -----------------------------------------------------------
     # Only what was delivered and demonstrably not sold can be wasted. An
@@ -488,13 +487,13 @@ def execute(plan: SeedPlan, client: httpx.Client, manifest_path: Path) -> None:
         print(f"\r  [{step}/{total}] receiving {branch.location_code}   ", end="", flush=True)
     checkpoint()
 
-    for branch in plan.sales:
+    for sales_branch in plan.sales:
         post(
             client,
             "/api/v1/sales",
             {
                 "business_date": str(plan.business_date),
-                "location_code": branch.location_code,
+                "location_code": sales_branch.location_code,
                 "confirmed_by_name": f"SAMPLE DATA {plan.run_id}",
                 "lines": [
                     {
@@ -502,13 +501,13 @@ def execute(plan: SeedPlan, client: httpx.Client, manifest_path: Path) -> None:
                         "qty": str(line.qty),
                         "sold_out": line.sold_out,
                     }
-                    for line in branch.lines
+                    for line in sales_branch.lines
                 ],
             },
         )
-        done["sales"].append(branch.location_code)
+        done["sales"].append(sales_branch.location_code)
         step += 1
-        print(f"\r  [{step}/{total}] sales {branch.location_code}   ", end="", flush=True)
+        print(f"\r  [{step}/{total}] sales {sales_branch.location_code}   ", end="", flush=True)
     checkpoint()
 
     for entry in plan.waste:
