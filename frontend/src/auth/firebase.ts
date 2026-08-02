@@ -5,12 +5,7 @@
 // app (permission checks, token refresh, RLS scope) stays on the existing
 // JWT machinery unchanged.
 import { initializeApp } from "firebase/app";
-import {
-  GoogleAuthProvider,
-  getAuth,
-  signInWithEmailAndPassword,
-  signInWithPopup,
-} from "firebase/auth";
+import { GoogleAuthProvider, getAuth, signInWithPopup } from "firebase/auth";
 
 const app = initializeApp({
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -34,13 +29,5 @@ googleProvider.setCustomParameters({ prompt: "select_account" });
  * treat it as a bug. */
 export async function signInWithGoogle(): Promise<string> {
   const credential = await signInWithPopup(auth, googleProvider);
-  return credential.user.getIdToken();
-}
-
-/** Throws Firebase's own error (e.g. auth/wrong-password, auth/user-not-found)
- * on a bad credential — callers should catch and show a normal error, not
- * treat it as a bug. */
-export async function signInWithEmailPassword(email: string, password: string): Promise<string> {
-  const credential = await signInWithEmailAndPassword(auth, email, password);
   return credential.user.getIdToken();
 }

@@ -4,11 +4,9 @@ import { useAuth } from "@/auth/AuthContext";
 import { signInWithGoogle } from "@/auth/firebase";
 import { GoogleIcon } from "@/components/icons";
 
-// Email+password sign-in (signInWithEmailPassword in auth/firebase.ts,
-// backend/app/auth/router.py's /api/v1/auth/firebase already handles both)
-// is deliberately not wired up here for now — Google is the one sign-in
-// path in the UI until there's an actual need for the other. Nothing
-// backend-side changed; this is a UI-only reduction.
+// Google is the one sign-in path in the UI. Email+password auth (both the
+// legacy bcrypt/JWT route and the Firebase email+password variant) has been
+// removed as dead code — see git history if it's ever needed again.
 export default function LoginPage() {
   const { loginWithFirebase, isLoggedIn } = useAuth();
   const navigate = useNavigate();

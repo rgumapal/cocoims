@@ -49,18 +49,8 @@ async function loginRequest(path: string, body: unknown, failureMessage: string)
   setTokens(tokens.access_token, tokens.refresh_token);
 }
 
-/** Legacy bcrypt/JWT login (backend/app/auth/router.py's /login) — left in
- * place as a dormant fallback but no longer called by the UI. Firebase
- * (email+password and Google both) is now the one sign-in path; see
- * loginWithFirebase below. */
-export async function login(email: string, password: string): Promise<void> {
-  await loginRequest("/api/v1/auth/login", { email, password }, "Login failed");
-}
-
-/** Exchanges a Firebase ID token — obtained from either
- * auth/firebase.ts's signInWithGoogle() or signInWithEmailPassword() — for
- * this app's own JWT pair. One backend endpoint for both, since the token
- * itself already says which provider was used; see
+/** Exchanges a Firebase ID token — obtained from auth/firebase.ts's
+ * signInWithGoogle() — for this app's own JWT pair. See
  * backend/app/auth/router.py's firebase_login docstring for why an
  * unrecognized email is rejected rather than auto-provisioned. */
 export async function loginWithFirebase(idToken: string): Promise<void> {
