@@ -57,3 +57,7 @@ movement_type_enum = pg_enum(
     "COUNT_ADJUSTMENT", "RETURN", "PRODUCTION", "CONSUMPTION", "OPENING",
     name="movement_type",
 )
+transfer_status_enum = pg_enum(
+    "DRAFT", "IN_TRANSIT", "RECEIVED", "CANCELLED",
+    name="transfer_status",
+)

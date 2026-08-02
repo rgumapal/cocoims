@@ -147,3 +147,25 @@ class LocationClosure(Base):
     created_by: Mapped[int | None]
 
     location: Mapped["Location"] = relationship(back_populates="closures")
+
+
+class ItemLocationParam(Base):
+    """Per-branch assortment: is_stocked, par/MOQ overrides, shelf capacity
+    (SPEC §5.5, §5.6). No rows exist yet anywhere in this database — the
+    onboarding wizard and assortment templates that would populate it
+    aren't built (see docs/INTEGRITY_ASSESSMENT.md). Consumers must treat
+    a missing row as "no assortment data recorded" (is_stocked unknown),
+    never as "not stocked" — see app.domain.transfer's destination-stocks
+    gate for the concrete case this matters for."""
+
+    __tablename__ = "item_location_param"
+    __table_args__ = {"schema": "core"}
+
+    item_code: Mapped[str] = mapped_column(ForeignKey("core.item.item_code"), primary_key=True)
+    location_code: Mapped[str] = mapped_column(ForeignKey("core.location.location_code"), primary_key=True)
+    is_stocked: Mapped[bool] = mapped_column(default=True)
+    par_qty: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    moq_override: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    display_capacity: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    source_template: Mapped[str | None] = mapped_column(ForeignKey("core.assortment_template.template_code"))
+    is_overridden: Mapped[bool] = mapped_column(default=False)

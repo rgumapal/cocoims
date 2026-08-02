@@ -144,15 +144,32 @@ def _get_location_or_404(session: Session, location_code: str) -> Location:
     return location
 
 
+# Location types that exist for ledger/system bookkeeping (the transfers
+# in-transit bucket today) rather than as a place a human picks from a
+# branch dropdown. Excluded by default — see include_system below — so
+# adding a new system location type here never silently becomes a
+# selectable option on Receiving/Sales/Waste/Counts/Stock Explorer, the
+# way it would if list_locations returned every row unfiltered (it did,
+# until docs/features/TRANSFERS_V1.md's TRANSIT location needed excluding).
+_SYSTEM_LOCATION_TYPES = ("IN_TRANSIT", "VIRTUAL")
+
+
 @router.get("", response_model=Page[LocationOut])
 def list_locations(
     session: Annotated[Session, Depends(get_db)],
     _: Annotated[AppUser, Depends(require_permission("location.read"))],
     status: str | None = Query(default=None),
+    include_system: bool = Query(
+        default=False,
+        description="Include system/virtual location types (e.g. the transfers "
+        "in-transit bucket) that aren't real, human-selectable branches.",
+    ),
     cursor: str | None = Query(default=None),
     limit: int = Query(default=50, le=200),
 ) -> Page[LocationOut]:
     stmt = select(Location).order_by(Location.location_code)
+    if not include_system:
+        stmt = stmt.where(Location.location_type.notin_(_SYSTEM_LOCATION_TYPES))
     if status:
         stmt = stmt.where(Location.status == status)
     if cursor:

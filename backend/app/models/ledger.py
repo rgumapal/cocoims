@@ -13,7 +13,7 @@ from decimal import Decimal
 from sqlalchemy import Computed, ForeignKey, Numeric, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, movement_type_enum
+from app.models.base import Base, movement_type_enum, transfer_status_enum
 
 
 class StockMovement(Base):
@@ -97,6 +97,64 @@ class CountLine(Base):
 
     variance_reason: Mapped[str | None]
     was_counted: Mapped[bool] = mapped_column(default=False)
+
+
+class Transfer(Base):
+    """Branch-to-branch rebalance — migration 0016, docs/features/TRANSFERS_V1.md.
+
+    transfer_no is set application-side once transfer_id is known (the
+    BIGSERIAL PK), not a DB default — see app.domain.transfer.create_transfer.
+    ship_idempotency_key/receive_idempotency_key back true idempotent replay
+    on those two actions (SPEC's general Idempotency-Key convention was
+    never actually wired to a stored value anywhere else in this codebase
+    before this feature — see app.domain.transfer for how it's checked).
+    """
+
+    __tablename__ = "transfer"
+    __table_args__ = {"schema": "core"}
+
+    transfer_id: Mapped[int] = mapped_column(primary_key=True)
+    transfer_no: Mapped[str | None]
+    source_location_code: Mapped[str] = mapped_column(ForeignKey("core.location.location_code"))
+    dest_location_code: Mapped[str] = mapped_column(ForeignKey("core.location.location_code"))
+    status: Mapped[str] = mapped_column(transfer_status_enum, default="DRAFT")
+    reason_code: Mapped[str | None] = mapped_column(ForeignKey("core.reason_code.reason_code"))
+    notes: Mapped[str | None]
+    created_by: Mapped[int | None]
+    created_at: Mapped[dt.datetime | None] = mapped_column(server_default=func.now())
+    shipped_by: Mapped[int | None]
+    shipped_at: Mapped[dt.datetime | None]
+    ship_idempotency_key: Mapped[str | None]
+    received_by: Mapped[int | None]
+    received_at: Mapped[dt.datetime | None]
+    receive_idempotency_key: Mapped[str | None]
+    cancelled_by: Mapped[int | None]
+    cancelled_at: Mapped[dt.datetime | None]
+
+
+class TransferLine(Base):
+    """source_location_code/dest_location_code are denormalised from the
+    parent Transfer at creation, never updated after — see migration
+    0016's docstring for why (this table has no RLS-usable location column
+    of its own otherwise, the same gap flagged for core.count_line in
+    docs/INTEGRITY_ASSESSMENT.md's top-5 #3; denormalising avoids repeating
+    it here). No audit trigger: composite PK, same exemption as
+    role_permission/uom_conversion/item_location_param (001_schema.sql)."""
+
+    __tablename__ = "transfer_line"
+    __table_args__ = {"schema": "core"}
+
+    transfer_id: Mapped[int] = mapped_column(ForeignKey("core.transfer.transfer_id"), primary_key=True)
+    item_code: Mapped[str] = mapped_column(ForeignKey("core.item.item_code"), primary_key=True)
+    source_location_code: Mapped[str] = mapped_column(ForeignKey("core.location.location_code"))
+    dest_location_code: Mapped[str] = mapped_column(ForeignKey("core.location.location_code"))
+    qty_requested: Mapped[Decimal] = mapped_column(Numeric(12, 3))
+    qty_shipped: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    qty_received: Mapped[Decimal | None] = mapped_column(Numeric(12, 3))
+    variance_qty: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 3), Computed("qty_received - qty_shipped")
+    )
+    variance_reason_code: Mapped[str | None] = mapped_column(ForeignKey("core.reason_code.reason_code"))
 
 
 class SoldOutEvent(Base):

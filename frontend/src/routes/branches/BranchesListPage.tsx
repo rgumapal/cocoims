@@ -30,9 +30,13 @@ export default function BranchesListPage() {
   // without the guided flow (assortment, schedule, OM) is a real gap the
   // wizard exists specifically to close, and a bare form would silently
   // skip it.
+  // include_system=true: this is the one screen that should show the
+  // transfers in-transit bucket alongside real branches/commissary, for
+  // admin visibility — every other location picker in the app defaults to
+  // excluding it (see backend/app/api/v1/locations.py's list_locations).
   const { data, isLoading } = useQuery({
-    queryKey: ["locations"],
-    queryFn: () => apiGet<Page<Location>>("/api/v1/locations?limit=200"),
+    queryKey: ["locations", "all"],
+    queryFn: () => apiGet<Page<Location>>("/api/v1/locations?limit=200&include_system=true"),
   });
 
   return (
