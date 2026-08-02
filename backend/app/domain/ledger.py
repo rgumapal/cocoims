@@ -20,7 +20,7 @@ from typing import NamedTuple
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import SoldOutEvent, StockMovement
+from app.models import Item, SoldOutEvent, StockMovement
 
 # SPEC §4.4: "qty signed: +in, -out". COUNT_ADJUSTMENT is deliberately
 # excluded from both sets — a cycle count can correct a balance in either
@@ -43,6 +43,20 @@ class ExcessSummary(NamedTuple):
     excess_qty: Decimal  # deliveries_qty - sales_qty; NOT floored at zero — see excess_summary
     excess_pct: Decimal | None  # None (not 0) when deliveries_qty is 0 — the ratio is undefined
     sold_out_dates: list[dt.date]
+
+
+class LocationItemStock(NamedTuple):
+    """One row of Stock Explorer's branch-level table (SPEC §1: every
+    quantity there should be traceable to how it was derived, not just
+    shown as a single number) — see location_stock_summary below."""
+
+    item_code: str
+    display_name: str
+    received_qty: Decimal  # Σ qty over every movement row where qty > 0 (all movement types)
+    deducted_qty: Decimal  # Σ qty over every movement row where qty < 0 — negative, or zero
+    balance_qty: Decimal  # received_qty + deducted_qty; matches balance_as_of exactly
+    excess_pct: Decimal | None  # same definition as ExcessSummary.excess_pct (RECEIPT vs SALE only)
+    run_outs: int  # count of distinct business_dates this item sold out, all-time through as_of_date
 
 
 def balance_as_of(
@@ -169,6 +183,94 @@ def excess_summary(
         excess_pct=excess_pct,
         sold_out_dates=list(sold_out_dates),
     )
+
+
+def location_stock_summary(
+    session: Session, location_code: str, as_of_date: dt.date
+) -> list[LocationItemStock]:
+    """Every item with ledger history at one branch, each broken into what
+    came in vs. what went out — the table Stock Explorer shows immediately
+    after picking a branch, before any one item is chosen. One set-based
+    query (CLAUDE.md PERFORMANCE: no per-row loop calling balance_as_of/
+    excess_summary once per item), not N.
+
+    received_qty/deducted_qty split every movement type by the sign of its
+    own qty rather than hand-picking which movement_type counts as "in" —
+    that's what makes received_qty + deducted_qty always equal balance_qty
+    exactly, including for COUNT_ADJUSTMENT, whose sign is data-dependent
+    (see _POSITIVE_MOVEMENT_TYPES's comment above). excess_pct keeps its
+    stricter existing definition (RECEIPT vs SALE only, see excess_summary)
+    since deliveries/sales are specific business concepts, not "any
+    inflow/outflow."
+    """
+    totals = (
+        select(
+            StockMovement.item_code.label("item_code"),
+            func.sum(StockMovement.qty).filter(StockMovement.qty > 0).label("received_qty"),
+            func.sum(StockMovement.qty).filter(StockMovement.qty < 0).label("deducted_qty"),
+            func.sum(StockMovement.qty).label("balance_qty"),
+            func.sum(StockMovement.qty)
+            .filter(StockMovement.movement_type == "RECEIPT")
+            .label("deliveries_qty"),
+            func.sum(StockMovement.qty)
+            .filter(StockMovement.movement_type == "SALE")
+            .label("sales_qty_signed"),
+        )
+        .where(
+            StockMovement.location_code == location_code,
+            StockMovement.business_date <= as_of_date,
+        )
+        .group_by(StockMovement.item_code)
+        .subquery()
+    )
+    run_outs = (
+        select(
+            SoldOutEvent.item_code.label("item_code"),
+            func.count().label("run_outs"),
+        )
+        .where(
+            SoldOutEvent.location_code == location_code,
+            SoldOutEvent.business_date <= as_of_date,
+        )
+        .group_by(SoldOutEvent.item_code)
+        .subquery()
+    )
+
+    rows = session.execute(
+        select(
+            Item.item_code,
+            Item.display_name,
+            func.coalesce(totals.c.received_qty, 0).label("received_qty"),
+            func.coalesce(totals.c.deducted_qty, 0).label("deducted_qty"),
+            func.coalesce(totals.c.balance_qty, 0).label("balance_qty"),
+            totals.c.deliveries_qty,
+            totals.c.sales_qty_signed,
+            func.coalesce(run_outs.c.run_outs, 0).label("run_outs"),
+        )
+        .select_from(totals)
+        .join(Item, Item.item_code == totals.c.item_code)
+        .outerjoin(run_outs, run_outs.c.item_code == totals.c.item_code)
+        .order_by(Item.item_code)
+    ).all()
+
+    result = []
+    for row in rows:
+        deliveries = Decimal(row.deliveries_qty) if row.deliveries_qty is not None else Decimal(0)
+        # SALE is stored negative; report the positive magnitude, same as excess_summary.
+        sales = -Decimal(row.sales_qty_signed) if row.sales_qty_signed is not None else Decimal(0)
+        excess_pct = ((deliveries - sales) / deliveries) if deliveries > 0 else None
+        result.append(
+            LocationItemStock(
+                item_code=row.item_code,
+                display_name=row.display_name,
+                received_qty=Decimal(row.received_qty),
+                deducted_qty=Decimal(row.deducted_qty),
+                balance_qty=Decimal(row.balance_qty),
+                excess_pct=excess_pct,
+                run_outs=row.run_outs,
+            )
+        )
+    return result
 
 
 def write_movement(

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { formatDateTime, todayLocalDate } from "@/lib/date";
+import { formatQty } from "@/lib/format";
 
 interface LineDraft {
   item_code: string;
@@ -19,15 +20,6 @@ interface LineDraft {
 // production_date defaults to today — the common case is receiving what
 // just arrived, not backdating.
 const emptyLine = (): LineDraft => ({ item_code: "", qty: "", production_date: todayLocalDate() });
-
-// "50.000" -> "50", "50.500" -> "50.5" — a NUMERIC(12,3) column's stored
-// scale is a storage detail, not something a store clerk needs to see
-// (quantities stay NUMERIC in the database regardless; this only touches
-// how the *input* is prefilled from a loaded value).
-function formatQty(qty: string): string {
-  const n = Number(qty);
-  return Number.isFinite(n) ? String(n) : qty;
-}
 
 function linesFromServer(saved: ReceivingLine[]): LineDraft[] {
   return saved.length > 0

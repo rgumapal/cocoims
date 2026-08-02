@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { formatDateTime, todayLocalDate } from "@/lib/date";
+import { formatQty } from "@/lib/format";
 
 interface LineDraft {
   item_code: string;
@@ -16,13 +17,6 @@ interface LineDraft {
 }
 
 const emptyLine = (): LineDraft => ({ item_code: "", qty: "", sold_out: false });
-
-// "50.000" -> "50", "50.500" -> "50.5" — a NUMERIC(12,3) column's stored
-// scale is a storage detail, not something a cashier needs to see.
-function formatQty(qty: string): string {
-  const n = Number(qty);
-  return Number.isFinite(n) ? String(n) : qty;
-}
 
 function formatMoney(value: string | null): string {
   if (value === null) return "—";

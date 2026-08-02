@@ -20,6 +20,11 @@ interface DataTableProps<T> {
   // way (no eslint config is installed — see the frontend's package.json).
   columns: ColumnDef<T, any>[];
   onRowClick?: (row: T) => void;
+  // SPEC §12.1: a row-selection border is one of the five places gold is
+  // allowed. Optional because most tables in this app have no concept of
+  // "the selected row" — only ones like Stock Explorer, where clicking a
+  // row drives a detail panel below it, need this.
+  getRowClassName?: (row: T) => string;
   isLoading?: boolean;
   emptyMessage?: string;
 }
@@ -35,6 +40,7 @@ export function DataTable<T>({
   data,
   columns,
   onRowClick,
+  getRowClassName,
   isLoading,
   emptyMessage = "No records yet.",
 }: DataTableProps<T>) {
@@ -107,7 +113,7 @@ export function DataTable<T>({
                 onClick={onRowClick ? () => onRowClick(row.original) : undefined}
                 className={`border-b border-border ${
                   onRowClick ? "cursor-pointer hover:bg-surface-hover" : ""
-                }`}
+                } ${getRowClassName?.(row.original) ?? ""}`}
                 style={{ height: ROW_HEIGHT }}
               >
                 {row.getVisibleCells().map((cell) => (

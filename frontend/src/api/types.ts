@@ -234,6 +234,19 @@ export interface FefoBucket {
   days_remaining: number | null;
 }
 
+// GET /api/v1/stock/by-location — one row per item with ledger history at
+// a branch, what Stock Explorer's table shows immediately after picking a
+// branch, before any single item is selected.
+export interface LocationItemStock {
+  item_code: string;
+  display_name: string;
+  received_qty: string;
+  deducted_qty: string; // negative, or "0"
+  balance_qty: string;
+  excess_pct: string | null;
+  run_outs: number;
+}
+
 export interface StockBalance {
   location_code: string;
   item_code: string;

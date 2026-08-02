@@ -15,7 +15,13 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.pagination import Page
 from app.auth.deps import get_db, require_permission
-from app.domain.ledger import balance_as_of, excess_summary, fefo_ageing, write_movement
+from app.domain.ledger import (
+    balance_as_of,
+    excess_summary,
+    fefo_ageing,
+    location_stock_summary,
+    write_movement,
+)
 from app.models import AppUser, StockMovement
 
 router = APIRouter(prefix="/api/v1/stock", tags=["stock"])
@@ -43,6 +49,16 @@ class StockBalanceOut(BaseModel):
     excess_qty: Decimal
     excess_pct: Decimal | None
     sold_out_dates: list[dt.date]
+
+
+class LocationItemStockOut(BaseModel):
+    item_code: str
+    display_name: str
+    received_qty: Decimal
+    deducted_qty: Decimal
+    balance_qty: Decimal
+    excess_pct: Decimal | None
+    run_outs: int
 
 
 class StockMovementOut(BaseModel):
@@ -77,6 +93,25 @@ class ManualAdjustmentRequest(BaseModel):
     # in, and accepting a field that's silently discarded would be worse
     # than not accepting it — reason_code is the structured field this row
     # actually persists.
+
+
+@router.get("/by-location", response_model=list[LocationItemStockOut])
+def list_stock_by_location(
+    session: Annotated[Session, Depends(get_db)],
+    _: Annotated[AppUser, Depends(require_permission("order.read"))],
+    location: str = Query(...),
+    as_of: dt.date | None = Query(default=None, description="Defaults to today"),
+) -> list[LocationItemStockOut]:
+    """Every item with ledger history at one branch, as of one date —
+    what Stock Explorer shows immediately after picking a branch, before
+    any single item is selected. Each row's balance is broken into
+    received vs. deducted so it's never just a bare number (SPEC's Ladder
+    Trace principle: any quantity should show its derivation). RLS scopes
+    `location` automatically, same as GET /stock.
+    """
+    as_of_date = as_of or dt.date.today()
+    rows = location_stock_summary(session, location, as_of_date)
+    return [LocationItemStockOut(**row._asdict()) for row in rows]
 
 
 @router.get("", response_model=StockBalanceOut)
