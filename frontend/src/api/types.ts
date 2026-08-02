@@ -180,21 +180,6 @@ export interface LocationClosure {
 // refdata — the six code tables share this shape (is_active, no PK type
 // distinction needed at the TS layer beyond the code field name itself)
 // ---------------------------------------------------------------------
-export interface ItemCategory {
-  category_code: string;
-  parent_code: string | null;
-  label: string;
-  sort_order: number;
-  is_active: boolean;
-}
-
-export interface Uom {
-  uom_code: string;
-  label: string;
-  is_fractional: boolean;
-  is_active: boolean;
-}
-
 export interface Cluster {
   cluster_code: string;
   label: string;
