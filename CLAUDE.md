@@ -1,209 +1,110 @@
 # Cocopan Inventory Management System
 
-Read `docs/SPEC.md` fully before implementing. Non-negotiable constraints:
+`docs/SPEC.md` is the build authority. Do NOT read it whole by default:
+read §0 (how-to-use + implementation status) + the §§ for the task at hand —
+`grep -n "^#" docs/SPEC.md` gives the TOC. Read it fully only before
+implementing a new engine/module (forecast §8, replenishment §9, accuracy §10).
+Stack: Python 3.12 / FastAPI / SQLAlchemy 2.x / Alembic / PostgreSQL 16 (Cloud SQL).
+Frontend: React 18 / Vite / TypeScript / TanStack Table / Tailwind.
 
-DATA
+## Workflow & Token Discipline
+- Read only files needed for the task; grep for symbols instead of opening directories.
+- Minimal diffs; no drive-by refactors or unasked features. YAGNI — rule of three:
+  the third duplication earns an abstraction, not the second.
+- Deep rationale lives in `docs/` — load on demand: @docs/local-dev.md (Cloud SQL
+  setup + why no local Postgres), @docs/migration-notes.md (migration changelog).
+
+## DATA — non-negotiable
 - Never coerce NULL to 0 in fact tables. Blank, zero and "not counted" are three
-  different facts. This is the single most important data rule in the system.
-- `core.stock_movement` is append-only. No UPDATE or DELETE. Corrections are
+  different facts. The single most important rule in the system.
+- `core.stock_movement` is append-only. No UPDATE/DELETE; corrections are
   offsetting movements.
-- Column names in `core.order_line` mirror the client's spreadsheet headers exactly.
-  Do not rename them for elegance — adoption depends on the vocabulary matching.
+- `core.order_line` column names mirror the client's spreadsheet headers exactly.
+  Do not rename for elegance — adoption depends on matching vocabulary.
 - Quantities are NUMERIC, never FLOAT.
 
-LOGIC
-- The order ladder (SPEC §9) runs in strict sequence and every intermediate value
-  is persisted. Do not collapse steps.
-- Generate orders with set-based SQL over `rpt.agg_location_item_dow`. Never a
-  per-row Python loop with per-row queries.
-- items with shelf_life_days > 0 use MULTI_DAY carryover. This is the core value.
+## LOGIC
+- The order ladder (SPEC §9) runs in strict sequence; persist every intermediate
+  value. Do not collapse steps.
+- Ladder and forecast are single set-based SQL statements over
+  `rpt.agg_location_item_dow` (SPEC §6.2). Never per-row Python loops with
+  per-row queries — set-based is both the readable and the fast way.
+- Items with shelf_life_days > 0 use MULTI_DAY carryover. This is the core value.
 
-ACCESS
-- Roles mirror real Cocopan positions. Authority = permission x branch scope.
+## ACCESS
+- Roles mirror real Cocopan positions. Authority = permission × branch scope.
 - Deny by default. Permission checked at API; branch scope enforced by Postgres RLS.
-- location.om_user_id grants scope automatically. Do not duplicate it in user_scope.
+  RLS default-denies any command type lacking a policy — every table needs
+  policies for every command it must support (see migration 0014).
+- `location.om_user_id` grants scope automatically; never duplicate in user_scope.
 - Every transaction sets app.user_id, app.user_email, app.request_id. A write
   without session context is a bug.
 
-DESIGN
-- Tokens in `frontend/src/design/tokens.css` are binding. Components reference
-  semantic tokens only, never primitives, never raw hex.
-- Light AND dark themes are required. Both must pass AA contrast.
-- Cocopan gold is an ACCENT: brand mark, one primary button, active nav indicator,
-  row-selection border, final value in the Ladder Trace. Nothing else.
-  Never gold text on light backgrounds. Attention state is steel blue, never amber.
-- All numbers render in IBM Plex Mono with tabular-nums.
-- The Ladder Trace is the signature component. Any quantity expands to show its
-  derivation.
+## DESIGN
+- Tokens in `frontend/src/design/tokens.css` are binding. Semantic tokens only —
+  never primitives, never raw hex, never inline styles.
+- Light AND dark themes required; both pass AA contrast (SPEC §12.8 is the floor,
+  built-to first time, not a follow-up pass).
+- Cocopan gold is an ACCENT only: brand mark, one primary button, active nav,
+  row-selection border, final Ladder Trace value. Never gold text on light
+  backgrounds. Attention state is steel blue, never amber.
+- All numbers: IBM Plex Mono, tabular-nums.
+- The Ladder Trace is the signature component: any quantity expands to show
+  its derivation.
 
-ENGINEERING STANDARDS
-Applies to every line of code in this repo, front and back. The audience for
-this codebase is not just experienced engineers — assume the next person to
-open it is capable but new to this stack, and optimize for them without
-sacrificing performance or UX. Those three (readability, speed, UX) are not
-in tension here; the rules below are chosen because they serve all three at
-once (e.g. set-based SQL is both the readable way and the fast way to express
-"apply this rule to 19,500 rows" — a Python loop is neither).
+## ENGINEERING STANDARDS
+Audience: capable engineers new to this stack. Optimize for them without
+sacrificing performance or UX — the rules below serve all three at once.
+- Docstrings on every public function/endpoint (FastAPI docstrings render in
+  `/docs`): what it does, which `permission.*` it requires, which scope applies.
+  Domain modules cite their SPEC section (`# Implements SPEC §9 steps 0-7`),
+  matching the existing pattern in `db/ddl` and migrations.
+- Comments explain WHY, never WHAT. Clear names replace "what" comments.
+- Types are documentation: mypy-clean Python, TS `strict: true`, no `any`.
+- One obvious way per thing: TanStack Query for all server state (no ad hoc
+  fetch/useEffect, no duplicating server state into local state), Tailwind +
+  semantic tokens for all styling.
 
-- **Docstrings on every public function/endpoint, not comments on every line.**
-  A FastAPI route's docstring is live documentation — it renders in `/docs`
-  (Swagger UI), so a beginner can read the entire API from a browser with zero
-  setup. State what it does, which `permission.*` it requires, and which scope
-  applies. Domain modules (`forecast.py`, `replenishment.py`, `accuracy.py`)
-  get a module-level docstring pointing at the SPEC section they implement
-  (`# Implements SPEC §9 steps 0-7`), the same way `db/ddl` and the Alembic
-  migrations already cite spec sections — keep that pattern going in Python.
-- **Comments explain WHY, never WHAT.** Clear names replace "what" comments;
-  a comment earns its place only for a non-obvious constraint, a workaround,
-  or a business rule a reader can't derive from the code (see `db/ddl/001_schema.sql`
-  and the Alembic migrations for the standard this repo already holds itself to).
-- **Types are documentation.** Every Python function signature is fully typed
-  (mypy-clean); every TypeScript file uses `strict: true`, no `any`. A
-  beginner should be able to hover a variable and know its shape without
-  reading the implementation.
-- **One obvious way to do each thing.** One data-fetching pattern (TanStack
-  Query — no ad hoc `fetch`/`useEffect`), one styling mechanism (Tailwind +
-  the semantic tokens in `frontend/src/design/tokens.css`, never inline
-  styles or a second CSS approach), one state pattern for server data (never
-  duplicate server state into local component state "just in case"). A repo
-  with two ways to do the same thing is a repo where a beginner picks the
-  wrong one.
-- **YAGNI over architecture.** No abstraction, config layer, or plugin system
-  for a requirement that doesn't exist yet (SPEC's own scope discipline in
-  §2.2 and the deferred-supplies decision are the model — build what's asked,
-  keep the seams generic where the spec says to, nothing more). Rule of three:
-  the third duplication earns an abstraction, not the second.
+## PERFORMANCE — backend
+- No N+1: explicit `selectinload`/`joinedload`; comment WHY when a query is
+  deliberately split.
+- Full-network order generation under 10s (SPEC AC-2).
+- Cursor pagination only; never OFFSET on growable tables (SPEC §6.5).
+- `pg_stat_statements` stays on; a statement over 500ms is a bug, not a follow-up.
+- Cache hot reference data (items, locations, resolved permissions) in Redis;
+  invalidate on write via the outbox, never poll.
 
-PERFORMANCE (backend)
-- No N+1 queries — use SQLAlchemy `selectinload`/`joinedload` explicitly, and
-  say why in a short comment when a query looks like it should be one call
-  but is deliberately two.
-- The ladder and forecast are single set-based SQL statements over
-  `rpt.agg_location_item_dow` (SPEC §6.2) — this is already a hard rule under
-  LOGIC above; it is also the performance rule. Full-network order generation
-  target is under 10 seconds (SPEC AC-2).
-- Cursor pagination only on list endpoints; never `OFFSET` on a table that can
-  grow past a few thousand rows (SPEC §6.5).
-- `pg_stat_statements` stays enabled; a statement over 500ms is treated as a
-  bug, not a follow-up.
-- Cache hot, rarely-changing reference data (items, locations, the resolved
-  permission set) in Redis; invalidate on write via the outbox, never poll.
-
-PERFORMANCE & UX (frontend)
-- Route-level code splitting (`React.lazy` + Vite dynamic `import()`) — the
-  Exception Workbench should not ship the Admin screens' JS on first paint.
+## PERFORMANCE & UX — frontend
+- Route-level code splitting (`React.lazy` + dynamic import).
 - Virtualize any grid over ~100 rows (TanStack Table + virtual scrolling).
-  This is a dense-grid system by design (SPEC §12.5); an unvirtualized table
-  is the single most common way to make it feel slow.
-- TanStack Query owns all server state — automatic caching, dedup and
-  background revalidation instead of hand-rolled loading flags.
-- Optimistic UI on every inline edit, with visible rollback on failure (SPEC
-  §12.6 rule 7) — this is what makes 19,500 rows feel instant to review even
-  when the network isn't.
-- Every loading state is a skeleton shaped like the content it replaces, never
-  a bare spinner or blank panel (SPEC §12.6 rule 6: never a blank screen).
-- Every error state says what happened and what to do next — never a raw
-  stack trace or a generic "Something went wrong."
-- Debounce search/filter inputs (~250ms); never fire a request per keystroke.
-- SPEC §12.8's accessibility floor and §12's token/theme rules are the UX
-  baseline, not a follow-up pass — build to them the first time, not after.
+- Optimistic UI on every inline edit, visible rollback on failure (SPEC §12.6.7).
+- Loading states are content-shaped skeletons, never spinners/blank (SPEC §12.6.6).
+- Error states say what happened and what to do next — never raw traces.
+- Debounce search/filter inputs (~250ms).
 
-BRANCHES & REFERENCE DATA
-- location.status drives everything; is_active / is_orderable are GENERATED. Never
-  set them by hand. Every transition writes location_status_history.
-- A closed day is an ABSENCE, not a zero. Exclude it from forecast reference
-  windows or the weekday average silently degrades. See SPEC §5.3.
-- Never delete a branch, item, cluster, area or reason code. Deactivate. History
-  and cluster analogs depend on them.
-- Every reference table needs full CRUD in the UI. No refdata task may require a
-  database console.
+## BRANCHES & REFERENCE DATA
+- `location.status` drives everything; is_active / is_orderable are GENERATED —
+  never set by hand. Every transition writes location_status_history.
+- A closed day is an ABSENCE, not a zero — exclude from forecast reference
+  windows or the weekday average silently degrades (SPEC §5.3).
+- Never delete branches, items, clusters, areas or reason codes — deactivate.
+  History and cluster analogs depend on them.
+- Every reference table gets full CRUD in the UI; no refdata task may require
+  a database console.
 
-SCOPE
-- v1 is FINISHED GOODS ONLY. Supplies, packaging and ingredients are deferred —
-  no source data exists. Keep item_type and the ledger generic, but build nothing
-  that depends on supply items.
-
-DONE
-- Acceptance is SPEC §14 AC-1: reproduce the client's existing numbers before
+## SCOPE & DONE
+- v1 is FINISHED GOODS ONLY. Supplies/packaging/ingredients deferred — keep
+  item_type and the ledger generic, build nothing that depends on supply items.
+- Acceptance = SPEC §14 AC-1: reproduce the client's existing numbers before
   improving them.
 
-Stack: Python 3.12 / FastAPI / SQLAlchemy 2.x / Alembic / PostgreSQL 16 (Cloud SQL)
-Frontend: React 18 / Vite / TypeScript / TanStack Table / Tailwind
-
-## Local development database
-
-Local dev connects **directly to Cloud SQL** (`cocoims:asia-southeast1:cocoims-db`)
-via the Cloud SQL Auth Proxy — there is no local Postgres container in the
-day-to-day path. This is deliberate, not an oversight: this is still a
-prototype with no live client/business data to protect from dev traffic,
-Cloud SQL bills for instance uptime and storage, not query volume (the
-instance already runs 24/7 for production regardless of whether local dev
-also connects), and a single database means no local/prod migration drift —
-the kind of drift that cost real time reconciling two databases mid-deploy
-before this decision. Revisit this if/when real client testing begins and
-live transactional data needs protecting from dev experiments.
-
-```
-cloud-sql-proxy --port 5433 cocoims:asia-southeast1:cocoims-db
-```
-
-(auto-authenticates via `gcloud auth application-default login`). Connection
-details then come from `.env` (copy from `.env.example`, fill in real
-passwords) exactly as before — nothing about `DATABASE_URL`/`APP_DATABASE_URL`
-changed shape, only what's on the other end of `127.0.0.1:5433`.
-
-`docker-compose.yml` (`cocoims-db`, local Postgres 16) still exists as a
-**fallback only** — spin it up when you deliberately want an isolated,
-disposable database to iterate on a risky migration before it touches the
-one real thing (swap `.env`'s two URLs to the `POSTGRES_*` block in the same
-file, matching the old `localhost:5433` local-Postgres credentials).
-
-Schema is authored as plain SQL in `db/ddl/` and `db/seed/`, not generated from
-ORM models. This is deliberate: the schema uses partitioned tables, generated
-columns, exclusion constraints, row-level security and triggers, none of which
-Alembic/SQLAlchemy autogenerate can produce reliably. `db/ddl`/`db/seed`'s
-baseline files are what `0001_baseline.py` replays (and what
-`docker-entrypoint-initdb.d` runs on a fresh local-Postgres fallback container)
-— matching Alembic revision `0001`. Everything after that is a normal
-incremental Alembic migration, run with `alembic upgrade head` from `backend/`
-— against Cloud SQL directly, so **this is the one and only migration run**;
-there's no separate "did I also apply this to prod" step anymore (deploying
-code still requires running migrations against Cloud SQL too, since Cloud Run
-doesn't do that automatically on deploy — see the `deploy` skill).
-
-Migration changelog (why, not just what — `alembic history` gives the full
-technical list):
-
-- `0001_baseline.py` — schema + core RBAC seed (`db/ddl/001_schema.sql`,
-  `db/seed/001_seed.sql`).
-- `0002_item_price_location_scope.py` — `core.item_price` gains
-  `location_code`/`price_status` (per-branch price overrides, needed once
-  real SRP data showed the network sheet and store tabs disagree) and
-  `core.app_user.role_hint`. Not in SPEC §4.3's literal DDL — a genuine
-  extension surfaced by real data, not a spec deviation.
-- `0003_client_data.py` — the real item master (34 SKUs) and branch master
-  (121 locations) from the client's workbook (`db/seed/002_client_data.sql`,
-  annotated `[REAL]`/`[ASSUMED]`/`[DERIVED]` section by section).
-- `0004_operational_rls_and_rpt.py` — closes a real RLS gap (write-path
-  policies were missing on several tables) and lands the `rpt`/`perf`
-  schema catch-up.
-- `0005`–`0009` — small fixes surfaced by real use: a missing seeded admin
-  user, `is_active` added to reference tables that lacked it, count-session
-  approval columns, an `item_price` EXCLUDE constraint that wrongly treated
-  two NULL `location_code` rows as conflicting, and the developer's own
-  SYS_ADMIN account.
-- `0010_sales_and_sold_out.py` — `sales.record` permission and
-  `core.sold_out_event` (the Sales page's "ran out" flag; a same-day fact,
-  not a ledger entry, so it lives outside `stock_movement`).
-- `0011`/`0012` — deactivate then hard-delete placeholder seed users
-  (explicit exception to "never delete, deactivate" — these were prototype
-  placeholders, not real history; keeps only `system@cocopan.ph`,
-  `svc.pos@cocopan.ph`, and the real developer account).
-- `0013_stock_movement_confirmed_by_name.py` — `confirmed_by_name`: who
-  physically handled a delivery/sale, if different from the logged-in
-  account (free text, not an `app_user` FK — the physical handler isn't
-  necessarily a system user).
-- `0014_sold_out_event_delete_policy.py` — `sold_out_event` had RLS with
-  SELECT/INSERT policies only; DELETE silently affected zero rows (Postgres
-  RLS default-denies any command type lacking a policy). Found by testing
-  the Sales edit flow end-to-end, not by inspection.
+## Database & Migrations (essentials)
+- Local dev connects directly to Cloud SQL via the proxy (deliberate — see
+  @docs/local-dev.md for rationale and the local-Postgres fallback):
+  `cloud-sql-proxy --port 5433 cocoims:asia-southeast1:cocoims-db`
+- Schema is authored as plain SQL in `db/ddl/` + `db/seed/` (partitioned
+  tables, generated columns, RLS, triggers — autogenerate can't produce these).
+  Baseline = Alembic `0001`; everything after is a normal incremental migration:
+  `alembic upgrade head` from `backend/`. Cloud Run does NOT run migrations on
+  deploy — run them yourself (see the `deploy` skill).
+- New migrations: add a why-entry to @docs/migration-notes.md.

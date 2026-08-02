@@ -1,8 +1,13 @@
 # Cocopan Inventory Management System (CIMS)
 ## Complete System Specification
 
-**Version:** 3.2
-**Supersedes:** SPEC v3.1
+**Version:** 3.3
+**Supersedes:** SPEC v3.2
+**Changes in 3.3:** Token CSS extracted to `frontend/src/design/tokens.css`
+(§12.2 now carries the rationale and points at the file, same pattern as the
+v3.1 DDL extraction — the CSS file is authoritative). Appendix CLAUDE.md
+starter removed; the root `CLAUDE.md` is maintained directly and the copy
+here had already drifted. No requirement changed.
 **Changes in 3.2:** Added an implementation-status overview (§0) and a status
 note on §13's API surface, reflecting what's actually built (Firebase auth,
 dashboard, receiving/sales, Cloud Run deployment) vs. still spec-only
@@ -818,87 +823,13 @@ Gold **never** appears as: body or label text, table fills, chart series for rou
 
 Two layers: fixed primitives, then semantic tokens that flip per theme. Components only ever reference semantic tokens.
 
-```css
-/* ---------- primitives (theme-independent) ---------- */
-:root {
-  --gold-400:#F7C64B; --gold-500:#F2B01E; --gold-600:#D4970F; --gold-700:#A87604;
-  --bark-500:#7A4E2D; --bark-600:#5C3A20;
-
-  /* Near-neutral greys with a barely-there warm cast, so the palette relates
-     to the brand without reading as brown. */
-  --n-0:#FFFFFF; --n-25:#FAFAF9; --n-50:#F5F4F2; --n-100:#EBEAE7;
-  --n-200:#DCDAD6; --n-300:#C2BFB9; --n-400:#9C9891; --n-500:#78746D;
-  --n-600:#5A5751; --n-700:#403D39; --n-800:#2B2926; --n-900:#1C1B19;
-  --n-950:#131211;
-
-  --green-500:#16785F; --green-400:#2E9B7E;
-  --blue-500:#2563A8;  --blue-400:#4A8BD1;
-  --red-500:#B3261E;   --red-400:#E0574E;
-
-  --r-sm:4px; --r-md:6px; --r-lg:10px;
-  --s-1:4px; --s-2:8px; --s-3:12px; --s-4:16px; --s-6:24px; --s-8:32px;
-}
-
-/* ---------- light ---------- */
-[data-theme="light"] {
-  --bg:            var(--n-25);
-  --surface:       var(--n-0);
-  --surface-2:     var(--n-50);     /* table header, zebra */
-  --surface-hover: var(--n-100);
-  --border:        var(--n-200);
-  --border-strong: var(--n-300);
-
-  --text:          var(--n-900);
-  --text-2:        var(--n-600);
-  --text-3:        var(--n-400);
-  --text-invert:   var(--n-0);
-
-  --accent:        var(--gold-500);
-  --accent-hover:  var(--gold-600);
-  --accent-fg:     var(--n-900);    /* text ON gold — never white */
-  --accent-subtle: #FDF3DA;
-
-  --positive:      var(--green-500);
-  --attention:     var(--blue-500);
-  --negative:      var(--red-500);
-  --positive-bg:   #E6F2EE;
-  --attention-bg:  #E7EFF8;
-  --negative-bg:   #FBE9E8;
-
-  --shadow-1: 0 1px 2px rgba(28,27,25,.06);
-  --shadow-2: 0 4px 12px rgba(28,27,25,.10);
-}
-
-/* ---------- dark ---------- */
-[data-theme="dark"] {
-  --bg:            var(--n-950);
-  --surface:       var(--n-900);
-  --surface-2:     var(--n-800);
-  --surface-hover: var(--n-700);
-  --border:        #2F2D2A;
-  --border-strong: #423F3B;
-
-  --text:          var(--n-50);
-  --text-2:        var(--n-300);
-  --text-3:        var(--n-400);
-  --text-invert:   var(--n-900);
-
-  --accent:        var(--gold-500);
-  --accent-hover:  var(--gold-400);
-  --accent-fg:     var(--n-950);
-  --accent-subtle: #3A2E12;
-
-  --positive:      var(--green-400);
-  --attention:     var(--blue-400);
-  --negative:      var(--red-400);
-  --positive-bg:   #12312A;
-  --attention-bg:  #16283A;
-  --negative-bg:   #38201E;
-
-  --shadow-1: 0 1px 2px rgba(0,0,0,.40);
-  --shadow-2: 0 4px 14px rgba(0,0,0,.50);
-}
-```
+The token values live in `frontend/src/design/tokens.css` and that file is
+authoritative — where this document and the CSS disagree, this document is
+the bug (same rule as `db/` for DDL). The file defines: gold + bark brand
+primitives, a warm-cast neutral ramp (`--n-0`…`--n-950`), cool semantic
+colours (green/blue/red in 400/500), radius + spacing scales, and a full
+`[data-theme="light"]` / `[data-theme="dark"]` semantic layer
+(bg/surface/border/text/accent/attention/positive/negative + shadows).
 
 **Theme behaviour**
 
@@ -1174,66 +1105,8 @@ Until this passes, enable no improvements. Reproducing their current answers is 
 
 ---
 
-## Appendix — CLAUDE.md starter
+## Appendix
 
-```markdown
-# Cocopan Inventory Management System
-
-Read `docs/SPEC.md` fully before implementing. Non-negotiable constraints:
-
-DATA
-- Never coerce NULL to 0 in fact tables. Blank, zero and "not counted" are three
-  different facts. This is the single most important data rule in the system.
-- `core.stock_movement` is append-only. No UPDATE or DELETE. Corrections are
-  offsetting movements.
-- Column names in `core.order_line` mirror the client's spreadsheet headers exactly.
-  Do not rename them for elegance — adoption depends on the vocabulary matching.
-- Quantities are NUMERIC, never FLOAT.
-
-LOGIC
-- The order ladder (SPEC §9) runs in strict sequence and every intermediate value
-  is persisted. Do not collapse steps.
-- Generate orders with set-based SQL over `rpt.agg_location_item_dow`. Never a
-  per-row Python loop with per-row queries.
-- items with shelf_life_days > 0 use MULTI_DAY carryover. This is the core value.
-
-ACCESS
-- Roles mirror real Cocopan positions. Authority = permission x branch scope.
-- Deny by default. Permission checked at API; branch scope enforced by Postgres RLS.
-- location.om_user_id grants scope automatically. Do not duplicate it in user_scope.
-- Every transaction sets app.user_id, app.user_email, app.request_id. A write
-  without session context is a bug.
-
-DESIGN
-- Tokens in `frontend/src/design/tokens.css` are binding. Components reference
-  semantic tokens only, never primitives, never raw hex.
-- Light AND dark themes are required. Both must pass AA contrast.
-- Cocopan gold is an ACCENT: brand mark, one primary button, active nav indicator,
-  row-selection border, final value in the Ladder Trace. Nothing else.
-  Never gold text on light backgrounds. Attention state is steel blue, never amber.
-- All numbers render in IBM Plex Mono with tabular-nums.
-- The Ladder Trace is the signature component. Any quantity expands to show its
-  derivation.
-
-BRANCHES & REFERENCE DATA
-- location.status drives everything; is_active / is_orderable are GENERATED. Never
-  set them by hand. Every transition writes location_status_history.
-- A closed day is an ABSENCE, not a zero. Exclude it from forecast reference
-  windows or the weekday average silently degrades. See SPEC 5.3.
-- Never delete a branch, item, cluster, area or reason code. Deactivate. History
-  and cluster analogs depend on them.
-- Every reference table needs full CRUD in the UI. No refdata task may require a
-  database console.
-
-SCOPE
-- v1 is FINISHED GOODS ONLY. Supplies, packaging and ingredients are deferred —
-  no source data exists. Keep item_type and the ledger generic, but build nothing
-  that depends on supply items.
-
-DONE
-- Acceptance is SPEC §14 AC-1: reproduce the client's existing numbers before
-  improving them.
-
-Stack: Python 3.12 / FastAPI / SQLAlchemy 2.x / Alembic / PostgreSQL 16 (Cloud SQL)
-Frontend: React 18 / Vite / TypeScript / TanStack Table / Tailwind
-```
+The project instructions file is the root `CLAUDE.md`, maintained directly
+(no starter copy is kept here — a duplicate drifts). Deep rationale it
+references lives in `docs/local-dev.md` and `docs/migration-notes.md`.
