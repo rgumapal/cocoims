@@ -76,13 +76,13 @@ RAN_OUT_SHARE = (0.40, 0.60)
 SALES_SHORTFALL = (1, 10)
 UNRECEIVED_SOLD_QTY = (5, 60)
 
-# Every branch/item with stock left over (received - sold > 0, see
-# build_plan's waste_candidates/eligible filters below) gets wasted — not a
-# random subset. The share bands stay as (1.0, 1.0) rather than hardcoding
-# "all of them" at the call site so _share's plumbing (and the "always at
-# least 1" floor) stays the one code path for every share decision in this
-# file, per CLAUDE.md's "one obvious way to do each thing."
-WASTE_BRANCH_SHARE = (1.00, 1.00)
+# Branch-level, not item-level, randomness: a real branch either closes
+# out its waste log for the day or it doesn't — staff that skip the task
+# skip all of it, they don't selectively log some items and not others.
+# So WASTE_BRANCH_SHARE is probabilistic (simulates branches that "missed"
+# recording waste entirely) but WASTE_ITEM_SHARE stays at 100% — a branch
+# that does report, reports every eligible item with stock left over.
+WASTE_BRANCH_SHARE = (0.70, 1.00)
 WASTE_ITEM_SHARE = (1.00, 1.00)
 
 # Only reason codes whose requires_note is FALSE. The waste endpoint
