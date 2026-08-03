@@ -1,4 +1,5 @@
-"""Generates a day of realistic sample Receiving -> Sales -> Waste activity.
+"""Generates a day of realistic sample Receiving -> Sales -> Transfers ->
+Waste activity.
 
 DEV/PROTOTYPE TOOL. Every row this writes lands in core.stock_movement,
 which is append-only (CLAUDE.md DATA) — there is no DELETE. `--undo` can
@@ -19,6 +20,10 @@ Why this posts to the API instead of INSERTing directly:
 - Receiving and Sales are diff-based (see app.api.v1.receiving/sales): a POST
   reconciles against the net state already on file. Inserting rows directly
   desyncs what those screens compute from what the ledger holds.
+- Transfers run a real state machine (DRAFT -> IN_TRANSIT -> RECEIVED) with
+  FEFO lot allocation decided server-side (app.domain.transfer) — there is no
+  shortcut that produces the same in-transit ledger leg and lot identity a
+  hand-written insert would have to reimplement badly.
 
 Going through HTTP is slower (~3 min for a full network day, mostly Cloud SQL
 round trips) but it is the only path that produces data identical to what a
@@ -98,7 +103,45 @@ WASTE_REASONS = (
     ("DONATION", 4),
 )
 
-REQUIRED_PERMISSIONS = ("receiving.confirm", "sales.record", "waste.record")
+# No real client volume exists for this yet (docs/features/TRANSFERS_V1.md
+# is a new-build prototype, not something the workbook ever recorded) — 0-10
+# is the user's own stated band, not derived from anything.
+TRANSFER_COUNT = (0, 10)
+# A transfer this small isn't worth a rider's trip; this floor matches the
+# reasoning behind RECEIVE_QTY's own floor above.
+TRANSFER_QTY = (3, 15)
+# Never draw a source branch down to nothing — some genuine surplus has to
+# remain, or the "rebalance a surplus" story the reason code tells is false.
+TRANSFER_MIN_SURPLUS = 2
+# Distribution across the state machine for a single day's snapshot: most
+# same-day rebalances (short distances, urgent) complete same-day; the rest
+# are caught mid-flight or not yet actioned, which is what a live dashboard
+# should actually look like, not "everything always finishes."
+TRANSFER_STATUS_WEIGHTS = (
+    ("RECEIVED", 60),
+    ("IN_TRANSIT", 20),
+    ("DRAFT", 15),
+    ("CANCELLED", 5),
+)
+# Only a RECEIVED transfer can carry a variance — DRAFT/IN_TRANSIT/CANCELLED
+# never reach the receive step at all.
+TRANSFER_VARIANCE_PROBABILITY = 0.15
+TRANSFER_VARIANCE_QTY = (1, 5)
+TRANSFER_REASON_SOLD_OUT = "REBALANCE_SOLD_OUT"
+TRANSFER_REASON_SURPLUS = "REBALANCE_SURPLUS"
+TRANSFER_VARIANCE_REASONS = (
+    ("SHORT_RECEIPT", 70),
+    ("DAMAGED_IN_TRANSIT", 30),
+)
+
+REQUIRED_PERMISSIONS = (
+    "receiving.confirm",
+    "sales.record",
+    "waste.record",
+    "transfer.create",
+    "transfer.ship",
+    "transfer.receive",
+)
 
 MANIFEST_DIR = Path(__file__).resolve().parent.parent / ".seed-runs"
 
@@ -146,11 +189,32 @@ class WasteEntry:
 
 
 @dataclass
+class TransferSeed:
+    """One transfer, carried as far through DRAFT -> IN_TRANSIT -> RECEIVED
+    as target_status calls for. Single-item by construction — a seed
+    generator doesn't need multi-line transfers to exercise the feature
+    realistically, and it keeps this dataclass (and execute()'s posting
+    logic) simple rather than modelling something no other part of this
+    script's output actually needs."""
+
+    source_location_code: str
+    dest_location_code: str
+    item_code: str
+    qty_requested: Decimal
+    reason_code: str
+    target_status: str  # DRAFT | IN_TRANSIT | RECEIVED | CANCELLED
+    qty_shipped: Decimal | None = None
+    qty_received: Decimal | None = None
+    variance_reason_code: str | None = None
+
+
+@dataclass
 class SeedPlan:
     business_date: dt.date
     run_id: str
     receiving: list[BranchReceiving] = field(default_factory=list)
     sales: list[BranchSales] = field(default_factory=list)
+    transfers: list[TransferSeed] = field(default_factory=list)
     waste: list[WasteEntry] = field(default_factory=list)
 
 
@@ -162,6 +226,35 @@ def _share(rng: random.Random, population: list, share: tuple[float, float]) -> 
     fraction = rng.uniform(*share)
     count = max(1, round(len(population) * fraction))
     return rng.sample(population, min(count, len(population)))
+
+
+def _pick_transfer_execution(
+    rng: random.Random, qty_requested: Decimal
+) -> tuple[str, Decimal | None, Decimal | None, str | None]:
+    """How far a generated transfer gets carried, and with what variance if
+    it's received — the one place this decision is made, since both transfer
+    sources in build_plan (ran-out-driven and surplus-fallback) need it
+    identically."""
+    target_status = rng.choices(
+        [status for status, _ in TRANSFER_STATUS_WEIGHTS],
+        weights=[weight for _, weight in TRANSFER_STATUS_WEIGHTS],
+        k=1,
+    )[0]
+    qty_shipped = qty_requested if target_status != "DRAFT" else None
+    qty_received: Decimal | None = None
+    variance_reason_code: str | None = None
+    if target_status == "RECEIVED":
+        assert qty_shipped is not None
+        qty_received = qty_shipped
+        if rng.random() < TRANSFER_VARIANCE_PROBABILITY:
+            variance = Decimal(rng.randint(*TRANSFER_VARIANCE_QTY))
+            qty_received = max(Decimal(0), qty_shipped - variance)
+            variance_reason_code = rng.choices(
+                [code for code, _ in TRANSFER_VARIANCE_REASONS],
+                weights=[weight for _, weight in TRANSFER_VARIANCE_REASONS],
+                k=1,
+            )[0]
+    return target_status, qty_shipped, qty_received, variance_reason_code
 
 
 def load_reference_data(engine) -> tuple[list[str], list[ItemRef]]:
@@ -305,13 +398,18 @@ def build_plan(
     )
 
     sold: dict[str, dict[str, SalesLine]] = {}
+    # (branch, item_code) pairs that ran out today — the transfer phase
+    # below picks its destinations from here, since "this branch sold out
+    # of this item" is exactly the real-world trigger for a rebalance.
+    ran_out_lines: list[tuple[str, str]] = []
 
     for branch in sorted(selling_branches):
         branch_received = received[branch]
         sellable = _share(rng, sorted(branch_received.keys()), SALES_ITEM_SHARE)
 
-        # Occasionally a branch sells something it wasn't delivered today
-        # (carryover stock, or a transfer this prototype doesn't model yet).
+        # Occasionally a branch sells something it wasn't delivered today —
+        # carryover stock, or (see the Transfers phase below) something a
+        # branch-to-branch rebalance brought in.
         unstocked = [c for c in item_by_code if c not in branch_received]
         extra: list[str] = []
         if unstocked and rng.random() < SALES_EXTRA_ITEM_PROBABILITY:
@@ -320,6 +418,7 @@ def build_plan(
             )
 
         ran_out = set(_share(rng, sorted(sellable), RAN_OUT_SHARE))
+        ran_out_lines.extend((branch, item_code) for item_code in sorted(ran_out))
 
         sale_lines: list[SalesLine] = []
         for item_code in sorted(sellable):
@@ -366,6 +465,101 @@ def build_plan(
         plan.sales.append(BranchSales(location_code=branch, lines=unreceived_sale_lines))
         sold[branch] = {line.item_code: line for line in unreceived_sale_lines}
 
+    # --- Transfers ---------------------------------------------------------
+    # Driven by ran_out_lines: a transfer's whole reason to exist is moving
+    # surplus to a branch that just ran out. Source candidates are any other
+    # branch that received this same item today and has more than
+    # TRANSFER_MIN_SURPLUS left after its own sales — a real "who still has
+    # stock" query, not a random pick. Shuffled so which ran-out lines get
+    # picked (there are usually more of them than TRANSFER_COUNT wants) isn't
+    # biased toward whichever branch/item sorts first.
+    target_transfer_count = rng.randint(*TRANSFER_COUNT)
+    shuffled_ran_out = list(ran_out_lines)
+    rng.shuffle(shuffled_ran_out)
+
+    for dest_branch, item_code in shuffled_ran_out:
+        if len(plan.transfers) >= target_transfer_count:
+            break
+        source_candidates = [
+            (branch, lines[item_code].qty - sold.get(branch, {}).get(
+                item_code, SalesLine(item_code, Decimal(0), False)
+            ).qty)
+            for branch, lines in received.items()
+            if branch != dest_branch and item_code in lines
+        ]
+        source_candidates = [
+            (branch, surplus) for branch, surplus in source_candidates
+            if surplus > TRANSFER_MIN_SURPLUS
+        ]
+        if not source_candidates:
+            continue
+        source_branch, surplus = rng.choice(source_candidates)
+
+        qty_requested = min(surplus - 1, Decimal(rng.randint(*TRANSFER_QTY)))
+        if qty_requested <= 0:
+            continue
+
+        target_status, qty_shipped, qty_received, variance_reason_code = (
+            _pick_transfer_execution(rng, qty_requested)
+        )
+
+        plan.transfers.append(
+            TransferSeed(
+                source_location_code=source_branch,
+                dest_location_code=dest_branch,
+                item_code=item_code,
+                qty_requested=qty_requested,
+                reason_code=TRANSFER_REASON_SOLD_OUT,
+                target_status=target_status,
+                qty_shipped=qty_shipped,
+                qty_received=qty_received,
+                variance_reason_code=variance_reason_code,
+            )
+        )
+
+    # If ran-out-driven candidates didn't fill the target (a quiet day with
+    # few sell-outs), top up with plain surplus-to-surplus rebalances between
+    # any two branches that both received the same item today — still real
+    # stock movement, just prompted by "we're overstocked" rather than "they
+    # ran out."
+    remaining_pairs = [
+        (src, dst, item_code)
+        for item_code in item_by_code
+        for src in received
+        for dst in received
+        if src != dst and item_code in received[src] and item_code in received[dst]
+    ]
+    rng.shuffle(remaining_pairs)
+    for source_branch, dest_branch, item_code in remaining_pairs:
+        if len(plan.transfers) >= target_transfer_count:
+            break
+        surplus = received[source_branch][item_code].qty - sold.get(
+            source_branch, {}
+        ).get(item_code, SalesLine(item_code, Decimal(0), False)).qty
+        if surplus <= TRANSFER_MIN_SURPLUS:
+            continue
+        qty_requested = min(surplus - 1, Decimal(rng.randint(*TRANSFER_QTY)))
+        if qty_requested <= 0:
+            continue
+
+        target_status, qty_shipped, qty_received, variance_reason_code = (
+            _pick_transfer_execution(rng, qty_requested)
+        )
+
+        plan.transfers.append(
+            TransferSeed(
+                source_location_code=source_branch,
+                dest_location_code=dest_branch,
+                item_code=item_code,
+                qty_requested=qty_requested,
+                reason_code=TRANSFER_REASON_SURPLUS,
+                target_status=target_status,
+                qty_shipped=qty_shipped,
+                qty_received=qty_received,
+                variance_reason_code=variance_reason_code,
+            )
+        )
+
     # --- Waste -----------------------------------------------------------
     # Only what was delivered and demonstrably not sold can be wasted. An
     # item that ran out has nothing left to throw away, and an item sold
@@ -405,14 +599,34 @@ def build_plan(
     return plan
 
 
+def _transfer_api_calls(transfer: TransferSeed) -> int:
+    """create is always one call; ship/receive/cancel each add one more,
+    exactly matching how many of them execute() will actually issue for
+    this transfer's target_status."""
+    calls = 1
+    if transfer.target_status in ("IN_TRANSIT", "RECEIVED"):
+        calls += 1  # ship
+    if transfer.target_status == "RECEIVED":
+        calls += 1  # receive
+    if transfer.target_status == "CANCELLED":
+        calls += 1  # cancel
+    return calls
+
+
 def summarize(plan: SeedPlan) -> str:
     received_units = sum(
         int(line.qty) for branch in plan.receiving for line in branch.lines
     )
     sold_units = sum(int(line.qty) for branch in plan.sales for line in branch.lines)
     wasted_units = sum(int(entry.qty) for entry in plan.waste)
+    transferred_units = sum(int(t.qty_requested) for t in plan.transfers)
     received_branches = {b.location_code for b in plan.receiving}
     sales_branches = {b.location_code for b in plan.sales}
+    transfer_api_calls = sum(_transfer_api_calls(t) for t in plan.transfers)
+    transfer_status_counts = {
+        status: sum(1 for t in plan.transfers if t.target_status == status)
+        for status, _ in TRANSFER_STATUS_WEIGHTS
+    }
 
     lines = [
         f"  business_date       {plan.business_date}",
@@ -422,31 +636,40 @@ def summarize(plan: SeedPlan) -> str:
         f"{sum(len(b.lines) for b in plan.receiving):>5} lines, {received_units:>7} units",
         f"  Sales               {len(plan.sales):>4} branches, "
         f"{sum(len(b.lines) for b in plan.sales):>5} lines, {sold_units:>7} units",
+        f"  Transfers           {len(plan.transfers):>4} transfers, "
+        f"{'':>5}       {transferred_units:>7} units "
+        f"({', '.join(f'{count} {status}' for status, count in transfer_status_counts.items() if count) or 'none'})",
         f"  Waste               {len(plan.waste):>4} entries, "
         f"{'':>5}       {wasted_units:>7} units",
         "",
         f"  Sold without a delivery today: {len(sales_branches - received_branches)} branch(es) "
         f"({', '.join(sorted(sales_branches - received_branches)) or 'none'})",
         f"  Ran-out lines:      {sum(1 for b in plan.sales for line in b.lines if line.sold_out)}",
-        f"  API calls to make:  {len(plan.receiving) + len(plan.sales) + len(plan.waste)}",
+        f"  API calls to make:  "
+        f"{len(plan.receiving) + len(plan.sales) + transfer_api_calls + len(plan.waste)}",
     ]
     return "\n".join(lines)
 
 
-def post(client: httpx.Client, path: str, payload: dict) -> None:
-    response = client.post(path, json=payload)
+def post(client: httpx.Client, path: str, payload: dict | None = None, **kwargs: object) -> dict:
+    """Returns the parsed response body — most callers (receiving/sales/
+    waste) don't need it, but the transfer cascade below does: it has to
+    read back transfer_id from the create response before it can ship,
+    receive or cancel that same transfer."""
+    response = client.post(path, json=payload, **kwargs)  # type: ignore[arg-type]
     if response.status_code >= 400:
         raise SystemExit(
             f"\n{path} failed ({response.status_code}): {response.text}\n"
             f"payload: {json.dumps(payload, default=str)}"
         )
+    return response.json()  # type: ignore[no-any-return]
 
 
 def execute(plan: SeedPlan, client: httpx.Client, manifest_path: Path) -> None:
     """Writes the plan in cascade order, recording progress after each branch
     so an interrupted run can be diagnosed (and the already-written portion
     identified) rather than guessed at."""
-    done: dict[str, list[str]] = {"receiving": [], "sales": [], "waste": []}
+    done: dict[str, list[str]] = {"receiving": [], "sales": [], "transfers": [], "waste": []}
 
     def checkpoint() -> None:
         manifest_path.write_text(
@@ -460,7 +683,8 @@ def execute(plan: SeedPlan, client: httpx.Client, manifest_path: Path) -> None:
             )
         )
 
-    total = len(plan.receiving) + len(plan.sales) + len(plan.waste)
+    transfer_api_calls = sum(_transfer_api_calls(t) for t in plan.transfers)
+    total = len(plan.receiving) + len(plan.sales) + transfer_api_calls + len(plan.waste)
     step = 0
 
     for branch in plan.receiving:
@@ -508,6 +732,62 @@ def execute(plan: SeedPlan, client: httpx.Client, manifest_path: Path) -> None:
         done["sales"].append(sales_branch.location_code)
         step += 1
         print(f"\r  [{step}/{total}] sales {sales_branch.location_code}   ", end="", flush=True)
+    checkpoint()
+
+    for i, transfer in enumerate(plan.transfers):
+        created = post(
+            client,
+            "/api/v1/transfers",
+            {
+                "source_location_code": transfer.source_location_code,
+                "dest_location_code": transfer.dest_location_code,
+                "reason_code": transfer.reason_code,
+                "notes": f"SAMPLE DATA {plan.run_id}",
+                "lines": [{"item_code": transfer.item_code, "qty_requested": str(transfer.qty_requested)}],
+            },
+        )
+        transfer_id = created["transfer_id"]
+
+        if transfer.target_status == "CANCELLED":
+            post(client, f"/api/v1/transfers/{transfer_id}/cancel")
+        elif transfer.qty_shipped is not None:
+            post(
+                client,
+                f"/api/v1/transfers/{transfer_id}/ship",
+                {
+                    "business_date": str(plan.business_date),
+                    "lines": [{"item_code": transfer.item_code, "qty_shipped": str(transfer.qty_shipped)}],
+                },
+                headers={"Idempotency-Key": f"seed-{plan.run_id}-{i}-ship"},
+            )
+            if transfer.target_status == "RECEIVED":
+                assert transfer.qty_received is not None
+                post(
+                    client,
+                    f"/api/v1/transfers/{transfer_id}/receive",
+                    {
+                        "business_date": str(plan.business_date),
+                        "lines": [
+                            {
+                                "item_code": transfer.item_code,
+                                "qty_received": str(transfer.qty_received),
+                                "variance_reason_code": transfer.variance_reason_code,
+                            }
+                        ],
+                    },
+                    headers={"Idempotency-Key": f"seed-{plan.run_id}-{i}-receive"},
+                )
+
+        done["transfers"].append(
+            f"{transfer.source_location_code}->{transfer.dest_location_code}/{transfer.item_code}"
+            f" ({transfer.target_status})"
+        )
+        step += _transfer_api_calls(transfer)
+        print(
+            f"\r  [{step}/{total}] transfer {transfer.source_location_code}->{transfer.dest_location_code}   ",
+            end="",
+            flush=True,
+        )
     checkpoint()
 
     for entry in plan.waste:
