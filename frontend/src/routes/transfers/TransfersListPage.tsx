@@ -445,6 +445,7 @@ function TransferDetailDialog({
           </table>
 
           <div className="flex justify-end gap-2">
+            <Button onClick={onClose}>Close</Button>
             {transfer.status === "DRAFT" && hasPermission("transfer.cancel") && (
               <Button variant="danger" onClick={() => cancelMutation.mutate()} disabled={cancelMutation.isPending}>
                 Cancel Transfer
