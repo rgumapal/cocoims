@@ -22,6 +22,7 @@ const SalesPage = lazy(() => import("@/routes/sales/SalesPage"));
 const WastePage = lazy(() => import("@/routes/waste/WastePage"));
 const UsersListPage = lazy(() => import("@/routes/users/UsersListPage"));
 const UserDetailPage = lazy(() => import("@/routes/users/UserDetailPage"));
+const GuidePage = lazy(() => import("@/routes/GuidePage"));
 
 function RouteFallback() {
   // Route-transition loading state — brief by design (a lazy chunk after
@@ -67,6 +68,8 @@ export function App() {
 
           <Route path="/users" element={<UsersListPage />} />
           <Route path="/users/:userId" element={<UserDetailPage />} />
+
+          <Route path="/guide" element={<GuidePage />} />
         </Route>
       </Routes>
     </Suspense>

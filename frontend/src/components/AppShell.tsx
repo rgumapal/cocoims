@@ -261,6 +261,12 @@ export function AppShell() {
               below the links on a short list and still gets pushed to the
               bottom of the viewport, without overlapping a long one. */}
           <div className="mt-auto border-t border-border px-3 py-2.5">
+            <NavLink
+              to="/guide"
+              className="mb-1 block font-ui text-micro text-text-3 hover:text-text-2 hover:underline"
+            >
+              User Guide
+            </NavLink>
             <p className="font-ui text-micro text-text-3">v{__APP_VERSION__}</p>
             <p className="font-ui text-micro text-text-3">
               © {new Date().getFullYear()} RGSuite
