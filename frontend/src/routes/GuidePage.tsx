@@ -47,21 +47,6 @@ export default function GuidePage() {
       />
 
       <div className="p-4">
-        <Section title="What this is">
-          <p>
-            Cocopan IMS replaces the current Excel workbook for tracking deliveries, sales, waste,
-            and stock movement across branches. Right now it covers the day-to-day record-keeping
-            side: logging what happened at each branch, keeping one reliable history of stock, and
-            giving admin staff a way to manage branches, items, and user access without a
-            spreadsheet.
-          </p>
-          <p>
-            It does <strong>not</strong> yet do automatic order suggestions, demand forecasting, or
-            performance analytics — that's the next phase, and it depends on this data-capture
-            layer being solid first. See "What's not built yet" below.
-          </p>
-        </Section>
-
         <Section title="Logging in">
           <p>
             Sign in with the Google account that was set up for you — there's no separate password
@@ -168,10 +153,9 @@ export default function GuidePage() {
 
         <Section title="What's not built yet">
           <p>
-            This is a data-capture foundation, not the full system described in the original spec.
-            Not built yet: automatic demand forecasting, suggested order quantities, the
-            accuracy/bias analytics dashboards, and file-based bulk import from other systems. Those
-            come next, once the numbers this phase produces are trusted.
+            Not yet available: automatic demand forecasting, suggested order quantities,
+            accuracy/bias analytics dashboards, and file-based bulk import from other systems.
+            Those are planned for a later phase.
           </p>
         </Section>
 

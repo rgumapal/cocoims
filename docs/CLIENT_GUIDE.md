@@ -5,18 +5,6 @@ on. This is a working pilot, not a finished product — some things below are
 intentionally simple for now. (Also available inside the app itself — look
 for "User Guide" at the bottom of the left-hand menu.)*
 
-## What this is
-
-Cocopan IMS replaces the current Excel workbook for tracking deliveries,
-sales, waste, and stock movement across branches. Right now it covers the
-day-to-day record-keeping side: logging what happened at each branch,
-keeping one reliable history of stock, and giving admin staff a way to
-manage branches, items, and user access without a spreadsheet.
-
-It does **not** yet do automatic order suggestions, demand forecasting, or
-performance analytics — that's the next phase, and it depends on this
-data-capture layer being solid first. See "What's not built yet" below.
-
 ## Logging in
 
 Sign in with the Google account that was set up for you — there's no
@@ -100,11 +88,9 @@ else access — it sends them a one-time setup link.
 
 ## What's not built yet
 
-This is a data-capture foundation, not the full system described in the
-original spec. Not built yet: automatic demand forecasting, suggested
-order quantities, the accuracy/bias analytics dashboards, and file-based
-bulk import from other systems. Those come next, once the numbers this
-phase produces are trusted.
+Not yet available: automatic demand forecasting, suggested order
+quantities, accuracy/bias analytics dashboards, and file-based bulk
+import from other systems. Those are planned for a later phase.
 
 ## What feedback is most useful right now
 
