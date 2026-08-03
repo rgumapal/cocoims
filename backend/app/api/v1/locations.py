@@ -151,7 +151,7 @@ def _get_location_or_404(session: Session, location_code: str) -> Location:
 # selectable option on Receiving/Sales/Waste/Counts/Stock Explorer, the
 # way it would if list_locations returned every row unfiltered (it did,
 # until docs/features/TRANSFERS_V1.md's TRANSIT location needed excluding).
-_SYSTEM_LOCATION_TYPES = ("IN_TRANSIT", "VIRTUAL")
+SYSTEM_LOCATION_TYPES = ("IN_TRANSIT", "VIRTUAL")
 
 
 @router.get("", response_model=Page[LocationOut])
@@ -169,7 +169,7 @@ def list_locations(
 ) -> Page[LocationOut]:
     stmt = select(Location).order_by(Location.location_code)
     if not include_system:
-        stmt = stmt.where(Location.location_type.notin_(_SYSTEM_LOCATION_TYPES))
+        stmt = stmt.where(Location.location_type.notin_(SYSTEM_LOCATION_TYPES))
     if status:
         stmt = stmt.where(Location.status == status)
     if cursor:

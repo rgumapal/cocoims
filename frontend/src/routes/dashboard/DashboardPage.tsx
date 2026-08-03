@@ -16,6 +16,7 @@ import {
   RefDataIcon,
   SalesIcon,
   StockIcon,
+  TransfersIcon,
   UsersIcon,
   WasteIcon,
 } from "@/components/icons";
@@ -143,6 +144,17 @@ export default function DashboardPage() {
                 <SubStat
                   value={data.waste.branches_logged_today}
                   label={`branch${data.waste.branches_logged_today === 1 ? "" : "es"} reporting`}
+                />
+              </StatCard>
+            )}
+
+            {data.transfers && (
+              <StatCard to="/transfers" icon={<TransfersIcon />} tint="blue" title="Transfers">
+                <Stat value={data.transfers.in_transit_count} label="in transit" />
+                <SubStat
+                  value={data.transfers.draft_count}
+                  label={`draft${data.transfers.draft_count === 1 ? "" : "s"} awaiting ship`}
+                  tone={data.transfers.draft_count > 0 ? "attention" : undefined}
                 />
               </StatCard>
             )}
@@ -293,7 +305,7 @@ function SubStat({
 function DashboardSkeleton() {
   return (
     <>
-      {Array.from({ length: 9 }).map((_, i) => (
+      {Array.from({ length: 10 }).map((_, i) => (
         <div
           key={i}
           className="animate-pulse rounded-lg border border-border bg-surface p-4"

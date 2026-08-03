@@ -58,6 +58,11 @@ export interface StockSummary {
   run_outs_today: number;
 }
 
+export interface TransfersSummary {
+  in_transit_count: number;
+  draft_count: number;
+}
+
 export interface ItemsSummary {
   active_count: number;
   total_count: number;
@@ -74,6 +79,7 @@ export interface DashboardSummary {
   waste: WasteSummary | null;
   counts: CountsSummary | null;
   stock: StockSummary | null;
+  transfers: TransfersSummary | null;
   items: ItemsSummary | null;
   branches: BranchesSummary | null;
 }

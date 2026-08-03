@@ -13,7 +13,8 @@ A section is omitted (null), not zeroed out, for a user who lacks the
 permission that domain's own list endpoint requires (CLAUDE.md ACCESS:
 deny by default) — Receiving/Sales/Waste/Stock all read core.stock_movement,
 so they share stock.py's "order.read" gate; Counts shares counts.py's
-"count.submit"; Items and Branches share their own list endpoints' gates.
+"count.submit"; Transfers shares transfers.py's "transfer.read"; Items and
+Branches share their own list endpoints' gates.
 """
 import datetime as dt
 from decimal import Decimal
@@ -24,8 +25,9 @@ from pydantic import BaseModel
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
+from app.api.v1.locations import SYSTEM_LOCATION_TYPES
 from app.auth.deps import get_current_user, get_db, get_user_permissions
-from app.models import AppUser, CountSession, Item, Location, SoldOutEvent, StockMovement
+from app.models import AppUser, CountSession, Item, Location, SoldOutEvent, StockMovement, Transfer
 
 router = APIRouter(prefix="/api/v1", tags=["dashboard"])
 
@@ -69,6 +71,11 @@ class StockSummary(BaseModel):
     run_outs_today: int
 
 
+class TransfersSummary(BaseModel):
+    in_transit_count: int  # shipped, waiting on the destination to receive
+    draft_count: int  # created, waiting on the source to ship
+
+
 class ItemsSummary(BaseModel):
     active_count: int
     total_count: int
@@ -85,6 +92,7 @@ class DashboardOut(BaseModel):
     waste: WasteSummary | None
     counts: CountsSummary | None
     stock: StockSummary | None
+    transfers: TransfersSummary | None
     items: ItemsSummary | None
     branches: BranchesSummary | None
 
@@ -257,6 +265,19 @@ def get_dashboard(
         ).scalar_one()
         counts = CountsSummary(open_count=open_count, pending_approval_count=pending_approval_count)
 
+    transfers = None
+    if "transfer.read" in permissions:
+        # RLS on core.transfer (migration 0016) already limits these counts
+        # to transfers where the caller has scope on the source or
+        # destination, same as every other query in this module.
+        in_transit_count = session.execute(
+            select(func.count()).select_from(Transfer).where(Transfer.status == "IN_TRANSIT")
+        ).scalar_one()
+        draft_count = session.execute(
+            select(func.count()).select_from(Transfer).where(Transfer.status == "DRAFT")
+        ).scalar_one()
+        transfers = TransfersSummary(in_transit_count=in_transit_count, draft_count=draft_count)
+
     items = None
     if "item.read" in permissions:
         total_count = session.execute(select(func.count()).select_from(Item)).scalar_one()
@@ -267,9 +288,15 @@ def get_dashboard(
 
     branches = None
     if "location.read" in permissions:
-        total_count = session.execute(select(func.count()).select_from(Location)).scalar_one()
+        # Excludes system/virtual location types (the transfers in-transit
+        # bucket) — same reasoning as list_locations' own default: this
+        # card is "how many branches," not "how many rows in core.location."
+        not_system = Location.location_type.notin_(SYSTEM_LOCATION_TYPES)
+        total_count = session.execute(
+            select(func.count()).select_from(Location).where(not_system)
+        ).scalar_one()
         active_count = session.execute(
-            select(func.count()).select_from(Location).where(Location.is_active.is_(True))
+            select(func.count()).select_from(Location).where(Location.is_active.is_(True), not_system)
         ).scalar_one()
         branches = BranchesSummary(active_count=active_count, total_count=total_count)
 
@@ -279,6 +306,7 @@ def get_dashboard(
         waste=waste,
         counts=counts,
         stock=stock,
+        transfers=transfers,
         items=items,
         branches=branches,
     )
