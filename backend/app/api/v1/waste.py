@@ -63,29 +63,37 @@ def list_waste(
     session: Annotated[Session, Depends(get_db)],
     _: Annotated[AppUser, Depends(require_permission("waste.record"))],
     location_code: str = Query(...),
-    item_code: str = Query(...),
     business_date: dt.date = Query(...),
+    item_code: str | None = Query(default=None),
 ) -> list[WasteEntryOut]:
-    """What's already on file for one branch/item/date — lets the Waste Log
-    screen show "this was already reported today" before a second entry is
-    made. Multiple entries for the same (branch, item, date) are legitimate
-    (a spoiled batch and a separately damaged one, different reasons) so
-    this returns every original WASTE row, not a single net figure the way
+    """What's already on file for one branch/date — lets the Waste Log
+    screen show every item already reported for that day, in one table,
+    before a new entry is made. item_code narrows to one item when given;
+    omitted, this is the whole day's waste for the branch, which is what
+    the main screen actually shows (SPEC: an editable table, not a
+    one-item-at-a-time lookup).
+
+    Multiple entries for the same (branch, item, date) are legitimate (a
+    spoiled batch and a separately damaged one, different reasons) so this
+    returns every original WASTE row, not a single net figure the way
     receiving's GET does — waste isn't a running total to reconcile, each
     entry is its own fact. is_reversed tells the caller whether a given
     entry's effect has already been undone by reverse_waste below, rather
     than the caller having to notice a same-day offsetting adjustment
     itself.
     """
+    conditions = [
+        StockMovement.location_code == location_code,
+        StockMovement.business_date == business_date,
+        StockMovement.movement_type == "WASTE",
+    ]
+    if item_code is not None:
+        conditions.append(StockMovement.item_code == item_code)
+
     rows = session.execute(
         select(StockMovement, AppUser.full_name)
         .outerjoin(AppUser, AppUser.user_id == StockMovement.created_by)
-        .where(
-            StockMovement.location_code == location_code,
-            StockMovement.item_code == item_code,
-            StockMovement.business_date == business_date,
-            StockMovement.movement_type == "WASTE",
-        )
+        .where(*conditions)
         .order_by(StockMovement.created_at.desc())
     ).all()
     if not rows:

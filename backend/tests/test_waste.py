@@ -66,6 +66,39 @@ def test_two_entries_same_day_both_appear(client: TestClient, db_connection: Con
     assert {e["reason_code"] for e in entries} == {"UNSOLD", "DAMAGED_IN_TRANSIT"}
 
 
+def test_list_without_item_code_returns_the_whole_days_waste_for_the_branch(
+    client: TestClient, db_connection: Connection
+) -> None:
+    """The main Waste Log screen shows one table per branch/date across
+    every item, not a per-item lookup — item_code narrows the query, it
+    isn't required."""
+    headers = login_as_role(db_connection, "STORE_HEAD")
+    _record(client, headers, qty="3", reason="UNSOLD")  # ITEM = CP001
+    response = client.post(
+        "/api/v1/waste",
+        headers=headers,
+        json={
+            "business_date": str(TEST_SENTINEL_DATE),
+            "location_code": LOCATION,
+            "item_code": "CP008",
+            "qty": "4",
+            "reason_code": "EXPIRED",
+        },
+    )
+    assert response.status_code == 201, response.text
+
+    whole_day = client.get(
+        "/api/v1/waste",
+        headers=headers,
+        params={"location_code": LOCATION, "business_date": str(TEST_SENTINEL_DATE)},
+    )
+    assert whole_day.status_code == 200, whole_day.text
+    assert {e["item_code"] for e in whole_day.json()} == {"CP001", "CP008"}
+
+    narrowed = _list(client, headers)  # item_code=CP001 only
+    assert {e["item_code"] for e in narrowed} == {"CP001"}
+
+
 def test_reverse_marks_entry_as_reversed_and_zeroes_its_effect(
     client: TestClient, db_connection: Connection
 ) -> None:
