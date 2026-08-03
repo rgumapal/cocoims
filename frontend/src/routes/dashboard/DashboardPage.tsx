@@ -214,7 +214,7 @@ export default function DashboardPage() {
                 nav doesn't gate Reference Data behind a permission either
                 (see AppShell.tsx), so it's always offered; Users & Roles
                 mirrors the nav's own user.manage gate. */}
-            <StatCard to="/refdata" icon={<RefDataIcon />} tint="purple" title="Reference Data">
+            <StatCard to="/refdata" icon={<RefDataIcon />} tint="green" title="Reference Data">
               <p className="font-ui text-small text-text-2">
                 Categories, units, clusters, areas, routes, and reason codes shared across the
                 system.
