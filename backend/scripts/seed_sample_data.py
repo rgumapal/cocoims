@@ -83,11 +83,21 @@ UNRECEIVED_SOLD_QTY = (5, 60)
 # Branch-level, not item-level, randomness: a real branch either closes
 # out its waste log for the day or it doesn't — staff that skip the task
 # skip all of it, they don't selectively log some items and not others.
-# So WASTE_BRANCH_SHARE is probabilistic (simulates branches that "missed"
-# recording waste entirely) but WASTE_ITEM_SHARE stays at 100% — a branch
-# that does report, reports every eligible item with stock left over.
 WASTE_BRANCH_SHARE = (0.70, 1.00)
-WASTE_ITEM_SHARE = (1.00, 1.00)
+
+# Leftover stock (delivered > sold) does not automatically mean wasted —
+# that was this generator's original assumption, and it produced an
+# unrealistically high daily count (every item with even 1 unit of
+# surplus became a full waste entry). A shelf_life_days=0 item genuinely
+# has no other option — unsold at close means thrown out, so it stays
+# close to "always." A MULTI_DAY item's surplus mostly just carries to a
+# future day instead; only a minority becomes an actual waste entry today.
+# This generator only ever produces one day at a time (no cross-day
+# ledger state to carry that surplus *into*), so "the rest carries over"
+# isn't modelled explicitly — it's simply left unlogged, which is the
+# correct net effect for a single day's snapshot.
+SAME_DAY_WASTE_ITEM_SHARE = (0.70, 1.00)
+MULTI_DAY_WASTE_ITEM_SHARE = (0.15, 0.35)
 
 # Only reason codes whose requires_note is FALSE. The waste endpoint
 # (app.api.v1.waste.WasteRequest) has no note field at all, so a code that
@@ -581,7 +591,15 @@ def build_plan(
             for item_code, line in received[branch].items()
             if line.qty - branch_sold.get(item_code, SalesLine(item_code, Decimal(0), False)).qty > 0
         ]
-        for item_code in sorted(_share(rng, sorted(eligible), WASTE_ITEM_SHARE)):
+        # Same-day and multi-day items get their surplus turned into an
+        # actual waste entry at very different rates — see
+        # SAME_DAY_WASTE_ITEM_SHARE/MULTI_DAY_WASTE_ITEM_SHARE above.
+        eligible_same_day = [c for c in eligible if item_by_code[c].shelf_life_days == 0]
+        eligible_multi_day = [c for c in eligible if item_by_code[c].shelf_life_days > 0]
+        wasted_today = _share(rng, sorted(eligible_same_day), SAME_DAY_WASTE_ITEM_SHARE) + _share(
+            rng, sorted(eligible_multi_day), MULTI_DAY_WASTE_ITEM_SHARE
+        )
+        for item_code in sorted(wasted_today):
             delivered = received[branch][item_code].qty
             sold_qty = branch_sold.get(
                 item_code, SalesLine(item_code, Decimal(0), False)
