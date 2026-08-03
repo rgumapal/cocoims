@@ -228,18 +228,20 @@ function CreateTransferDialog({
               disabled={!!defaultSource}
             >
               <option value="">Select…</option>
-              {locations?.items.map((l) => (
-                <option key={l.location_code} value={l.location_code}>
-                  {l.location_code} — {l.location_name}
-                </option>
-              ))}
+              {locations?.items
+                .filter((l) => l.is_active)
+                .map((l) => (
+                  <option key={l.location_code} value={l.location_code}>
+                    {l.location_code} — {l.location_name}
+                  </option>
+                ))}
             </Select>
           </Field>
           <Field label="To" htmlFor="t_dest">
             <Select id="t_dest" required value={dest} onChange={(e) => setDest(e.target.value)}>
               <option value="">Select…</option>
               {locations?.items
-                .filter((l) => l.location_code !== source)
+                .filter((l) => l.is_active && l.location_code !== source)
                 .map((l) => (
                   <option key={l.location_code} value={l.location_code}>
                     {l.location_code} — {l.location_name}

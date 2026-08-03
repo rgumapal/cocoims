@@ -67,8 +67,10 @@ export default function SalesPage() {
   // their effective scope — already flattened to individual branch codes
   // regardless of whether the underlying grant was branch-, area-,
   // cluster- or route-level (see /auth/me).
+  // is_active excludes closed/delisted/pre-opening branches — a branch
+  // that isn't trading has nothing to sell today.
   const availableLocations = (locations?.items ?? []).filter(
-    (l) => me?.unrestricted || me?.location_scope.includes(l.location_code),
+    (l) => l.is_active && (me?.unrestricted || me?.location_scope.includes(l.location_code)),
   );
 
   const salesKey = locationCode && businessDate ? `${locationCode}|${businessDate}` : null;

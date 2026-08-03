@@ -77,8 +77,10 @@ export default function ReceivingPage() {
   // by core.v_user_effective_scope regardless of whether the underlying
   // grant was branch-, area-, cluster- or route-level (see /auth/me), so
   // no separate "is this an area or a branch" handling is needed here.
+  // is_active excludes closed/delisted/pre-opening branches — a branch
+  // that isn't trading has nothing to receive against today.
   const availableLocations = (locations?.items ?? []).filter(
-    (l) => me?.unrestricted || me?.location_scope.includes(l.location_code),
+    (l) => l.is_active && (me?.unrestricted || me?.location_scope.includes(l.location_code)),
   );
 
   const receivingKey = locationCode && businessDate ? `${locationCode}|${businessDate}` : null;

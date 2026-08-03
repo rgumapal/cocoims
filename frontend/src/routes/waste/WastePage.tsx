@@ -129,11 +129,13 @@ export default function WastePage() {
               }}
             >
               <option value="">Select…</option>
-              {locations?.items.map((l) => (
-                <option key={l.location_code} value={l.location_code}>
-                  {l.location_code} — {l.location_name}
-                </option>
-              ))}
+              {locations?.items
+                .filter((l) => l.is_active)
+                .map((l) => (
+                  <option key={l.location_code} value={l.location_code}>
+                    {l.location_code} — {l.location_name}
+                  </option>
+                ))}
             </Select>
           </Field>
           <Field label="Business date" htmlFor="w_date">
