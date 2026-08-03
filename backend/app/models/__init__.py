@@ -3,6 +3,7 @@
 These describe an already-existing database; they never generate one
 (Base.metadata is never passed to create_all/drop_all — see base.py).
 """
+from app.models.audit import AuditRecordChange
 from app.models.base import Base
 from app.models.catalogue import (
     Item,
@@ -43,6 +44,7 @@ from app.models.location import (
 )
 
 __all__ = [
+    "AuditRecordChange",
     "Base",
     "Item",
     "ItemAlias",

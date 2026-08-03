@@ -1,6 +1,7 @@
 """Aggregates every v1 router into one for app.main to include."""
 from fastapi import APIRouter
 
+from app.api.v1.audit import router as audit_router
 from app.api.v1.counts import router as counts_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.items import router as items_router
@@ -25,3 +26,4 @@ router.include_router(waste_router)
 router.include_router(transfers_router)
 router.include_router(counts_router)
 router.include_router(users_router)
+router.include_router(audit_router)
