@@ -73,6 +73,10 @@ export interface BranchesSummary {
   total_count: number;
 }
 
+export interface AuditSummary {
+  changes_last_2_days: number;
+}
+
 export interface DashboardSummary {
   receiving: ReceivingSummary | null;
   sales: SalesSummary | null;
@@ -82,6 +86,7 @@ export interface DashboardSummary {
   transfers: TransfersSummary | null;
   items: ItemsSummary | null;
   branches: BranchesSummary | null;
+  audit: AuditSummary | null;
 }
 
 // ---------------------------------------------------------------------
@@ -436,4 +441,23 @@ export interface Role {
   label: string;
   description: string | null;
   is_system: boolean;
+}
+
+// ---------------------------------------------------------------------
+// audit
+// ---------------------------------------------------------------------
+export interface AuditRecord {
+  audit_id: number;
+  occurred_at: string;
+  schema_name: string;
+  table_name: string;
+  record_pk: string;
+  action: string;
+  changed_by: number | null;
+  changed_by_email: string | null;
+  changed_by_full_name: string | null;
+  changed_fields: string[] | null;
+  old_values: Record<string, unknown> | null;
+  new_values: Record<string, unknown> | null;
+  request_id: string | null;
 }

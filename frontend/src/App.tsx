@@ -22,6 +22,7 @@ const SalesPage = lazy(() => import("@/routes/sales/SalesPage"));
 const WastePage = lazy(() => import("@/routes/waste/WastePage"));
 const UsersListPage = lazy(() => import("@/routes/users/UsersListPage"));
 const UserDetailPage = lazy(() => import("@/routes/users/UserDetailPage"));
+const AuditLogPage = lazy(() => import("@/routes/audit/AuditLogPage"));
 const GuidePage = lazy(() => import("@/routes/GuidePage"));
 
 function RouteFallback() {
@@ -68,6 +69,8 @@ export function App() {
 
           <Route path="/users" element={<UsersListPage />} />
           <Route path="/users/:userId" element={<UserDetailPage />} />
+
+          <Route path="/audit" element={<AuditLogPage />} />
 
           <Route path="/guide" element={<GuidePage />} />
         </Route>

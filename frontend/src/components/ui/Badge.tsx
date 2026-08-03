@@ -45,6 +45,10 @@ const STATUS_TONES: Record<string, BadgeTone> = {
   IN_TRANSIT: "attention",
   RECEIVED: "positive",
   CANCELLED: "negative",
+  // audit.record_change.action (audit_action enum)
+  INSERT: "positive",
+  UPDATE: "attention",
+  DELETE: "negative",
 };
 
 export function StatusBadge({ status }: { status: string }) {

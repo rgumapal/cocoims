@@ -102,6 +102,15 @@ export function RefDataIcon() {
   );
 }
 
+export function AuditIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 2.5 3 4.7v4.1c0 4 2.5 6.7 6 7.7 3.5-1 6-3.7 6-7.7V4.7L9 2.5Z" />
+      <path d="M6.5 9.2l1.7 1.7 3.3-3.8" />
+    </svg>
+  );
+}
+
 export function UsersIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">

@@ -14,6 +14,19 @@ export function todayLocalDate(): string {
   return `${year}-${month}-${day}`;
 }
 
+/** `daysAgo` days before today, in the browser's local calendar — for
+ * filters that default to a trailing window (e.g. Audit Logs' "last two
+ * days") rather than a single day. Same local-day reasoning as
+ * todayLocalDate() above. */
+export function daysAgoLocalDate(daysAgo: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - daysAgo);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 /** Renders an ISO timestamp (e.g. stock_movement.created_at) in the
  * browser's local time zone, for audit-trail display ("last updated at") —
  * short enough to sit inline in a dense table cell. Returns "—" for null,

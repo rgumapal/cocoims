@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { useTheme } from "@/design/ThemeContext";
 import {
+  AuditIcon,
   BranchesIcon,
   CountsIcon,
   DashboardIcon,
@@ -79,6 +80,7 @@ const NAV_GROUPS: { label: string; links: NavLinkItem[] }[] = [
       // shown and 403'd, since a nav link to a screen you can't use is
       // exactly the kind of dead end SPEC §12.6 rule 6 argues against.
       { to: "/users", label: "Users & Roles", icon: UsersIcon, permission: "user.manage" },
+      { to: "/audit", label: "Audit Logs", icon: AuditIcon, permission: "audit.read" },
     ],
   },
 ];

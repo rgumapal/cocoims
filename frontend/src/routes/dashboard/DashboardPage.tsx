@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { todayLocalDate } from "@/lib/date";
 import {
+  AuditIcon,
   BranchesIcon,
   CountsIcon,
   ItemsIcon,
@@ -226,6 +227,12 @@ export default function DashboardPage() {
                 <p className="font-ui text-small text-text-2">
                   Manage accounts, roles, and branch access.
                 </p>
+              </StatCard>
+            )}
+
+            {data.audit && (
+              <StatCard to="/audit" icon={<AuditIcon />} tint="red" title="Audit Logs">
+                <Stat value={data.audit.changes_last_2_days} label="changes in the last 2 days" />
               </StatCard>
             )}
           </>

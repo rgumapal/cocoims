@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.locations import SYSTEM_LOCATION_TYPES
 from app.auth.deps import get_current_user, get_db, get_user_permissions
-from app.models import AppUser, CountSession, Item, Location, SoldOutEvent, StockMovement, Transfer
+from app.models import AppUser, AuditRecordChange, CountSession, Item, Location, SoldOutEvent, StockMovement, Transfer
 
 router = APIRouter(prefix="/api/v1", tags=["dashboard"])
 
@@ -86,6 +86,10 @@ class BranchesSummary(BaseModel):
     total_count: int
 
 
+class AuditSummary(BaseModel):
+    changes_last_2_days: int  # matches the Audit Logs page's own default range
+
+
 class DashboardOut(BaseModel):
     receiving: ReceivingSummary | None
     sales: SalesSummary | None
@@ -95,6 +99,7 @@ class DashboardOut(BaseModel):
     transfers: TransfersSummary | None
     items: ItemsSummary | None
     branches: BranchesSummary | None
+    audit: AuditSummary | None
 
 
 def _movement_count(session: Session, movement_type: str, business_date: dt.date) -> int:
@@ -303,6 +308,15 @@ def get_dashboard(
         ).scalar_one()
         branches = BranchesSummary(active_count=active_count, total_count=total_count)
 
+    audit = None
+    if "audit.read" in permissions:
+        changes_last_2_days = session.execute(
+            select(func.count()).select_from(AuditRecordChange).where(
+                AuditRecordChange.occurred_at >= today - dt.timedelta(days=2)
+            )
+        ).scalar_one()
+        audit = AuditSummary(changes_last_2_days=changes_last_2_days)
+
     return DashboardOut(
         receiving=receiving,
         sales=sales,
@@ -312,4 +326,5 @@ def get_dashboard(
         transfers=transfers,
         items=items,
         branches=branches,
+        audit=audit,
     )
