@@ -24,7 +24,7 @@ import {
 const CARD_CLASSES =
   "flex flex-col gap-2 rounded-lg border border-border bg-surface p-4 text-left transition-colors duration-theme hover:border-border-strong hover:bg-surface-hover";
 
-type Tint = "blue" | "green" | "red" | "purple" | "teal" | "slate";
+type Tint = "blue" | "green" | "red" | "purple" | "teal" | "slate" | "yellow" | "orange";
 
 // Static strings, not template literals: Tailwind scans source text for
 // class names, so a constructed `bg-tint-${tone}-bg` would never make it
@@ -36,6 +36,8 @@ const TINT_CLASSES: Record<Tint, string> = {
   purple: "bg-tint-purple-bg text-tint-purple-fg",
   teal: "bg-tint-teal-bg text-tint-teal-fg",
   slate: "bg-tint-slate-bg text-tint-slate-fg",
+  yellow: "bg-tint-yellow-bg text-tint-yellow-fg",
+  orange: "bg-tint-orange-bg text-tint-orange-fg",
 };
 
 // Rounded, comma-grouped pesos — a dashboard headline reads faster without
@@ -140,7 +142,7 @@ export default function DashboardPage() {
 
             {data.waste && (
               <StatCard to="/waste" icon={<WasteIcon />} tint="red" title="Waste Log">
-                <Stat value={data.waste.items_logged_today} label="items logged" />
+                <Stat value={data.waste.entries_logged_today} label="entries logged" />
                 <SubStat
                   value={data.waste.branches_logged_today}
                   label={`branch${data.waste.branches_logged_today === 1 ? "" : "es"} reporting`}
@@ -191,7 +193,7 @@ export default function DashboardPage() {
             </div>
 
             {data.items && (
-              <StatCard to="/items" icon={<ItemsIcon />} tint="slate" title="Items">
+              <StatCard to="/items" icon={<ItemsIcon />} tint="yellow" title="Items">
                 <Stat
                   value={data.items.active_count}
                   label={`active, of ${data.items.total_count} total`}
@@ -200,7 +202,7 @@ export default function DashboardPage() {
             )}
 
             {data.branches && (
-              <StatCard to="/branches" icon={<BranchesIcon />} tint="slate" title="Branches">
+              <StatCard to="/branches" icon={<BranchesIcon />} tint="orange" title="Branches">
                 <Stat
                   value={data.branches.active_count}
                   label={`active, of ${data.branches.total_count} total`}
@@ -212,7 +214,7 @@ export default function DashboardPage() {
                 nav doesn't gate Reference Data behind a permission either
                 (see AppShell.tsx), so it's always offered; Users & Roles
                 mirrors the nav's own user.manage gate. */}
-            <StatCard to="/refdata" icon={<RefDataIcon />} tint="slate" title="Reference Data">
+            <StatCard to="/refdata" icon={<RefDataIcon />} tint="purple" title="Reference Data">
               <p className="font-ui text-small text-text-2">
                 Categories, units, clusters, areas, routes, and reason codes shared across the
                 system.

@@ -45,6 +45,10 @@ export default {
         "tint-teal-bg": "var(--tint-teal-bg)",
         "tint-slate-fg": "var(--tint-slate-fg)",
         "tint-slate-bg": "var(--tint-slate-bg)",
+        "tint-yellow-fg": "var(--tint-yellow-fg)",
+        "tint-yellow-bg": "var(--tint-yellow-bg)",
+        "tint-orange-fg": "var(--tint-orange-fg)",
+        "tint-orange-bg": "var(--tint-orange-bg)",
 
         positive: "var(--positive)",
         attention: "var(--attention)",

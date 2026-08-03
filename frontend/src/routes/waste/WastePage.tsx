@@ -1,13 +1,16 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { apiGet, apiPost } from "@/api/client";
-import type { Item, Location, Page, ReasonCode, StockMovement } from "@/api/types";
+import type { Item, Location, Page, ReasonCode, StockMovement, WasteEntry } from "@/api/types";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { todayLocalDate } from "@/lib/date";
+import { formatDateTime, todayLocalDate } from "@/lib/date";
+import { formatQty } from "@/lib/format";
 
 export default function WastePage() {
+  const queryClient = useQueryClient();
   const [locationCode, setLocationCode] = useState("");
   const [itemCode, setItemCode] = useState("");
   const [businessDate, setBusinessDate] = useState(todayLocalDate);
@@ -34,6 +37,26 @@ export default function WastePage() {
   });
   const wasteReasons = reasonCodes?.filter((r) => r.category === "WASTE" && r.is_active) ?? [];
 
+  // Once branch, item and date are all picked, check what's already been
+  // reported for that exact combination — a second entry is often
+  // legitimate (a different reason, a separate batch), but it should never
+  // be a surprise duplicate someone didn't know was already on file.
+  const existingKey =
+    locationCode && itemCode && businessDate ? `${locationCode}|${itemCode}|${businessDate}` : null;
+  const { data: existingEntries, isFetching: isLoadingExisting } = useQuery({
+    queryKey: ["waste-entries", locationCode, itemCode, businessDate],
+    queryFn: () =>
+      apiGet<WasteEntry[]>(
+        `/api/v1/waste?location_code=${encodeURIComponent(locationCode)}` +
+          `&item_code=${encodeURIComponent(itemCode)}&business_date=${businessDate}`,
+      ),
+    enabled: !!existingKey,
+  });
+
+  function invalidateExisting(): void {
+    void queryClient.invalidateQueries({ queryKey: ["waste-entries", locationCode, itemCode, businessDate] });
+  }
+
   const submitMutation = useMutation({
     mutationFn: () =>
       apiPost<StockMovement>("/api/v1/waste", {
@@ -50,8 +73,15 @@ export default function WastePage() {
       setQty("");
       setReasonCode("");
       setProductionDate("");
+      invalidateExisting();
     },
     onError: (err) => setError(err instanceof Error ? err.message : "Could not record waste"),
+  });
+
+  const reverseMutation = useMutation({
+    mutationFn: (movementId: number) => apiPost(`/api/v1/waste/${movementId}/reverse`),
+    onSuccess: invalidateExisting,
+    onError: (err) => setError(err instanceof Error ? err.message : "Could not reverse that entry"),
   });
 
   return (
@@ -120,6 +150,49 @@ export default function WastePage() {
             />
           </Field>
         </div>
+
+        {existingKey && (
+          <div className="rounded-md border border-border bg-surface-2 p-3">
+            <h2 className="mb-2 font-ui text-small font-medium text-text-2">
+              Already reported for {itemCode} at {locationCode} on {businessDate}
+            </h2>
+            {isLoadingExisting ? (
+              <p className="font-ui text-small text-text-3">Checking…</p>
+            ) : !existingEntries || existingEntries.length === 0 ? (
+              <p className="font-ui text-small text-text-3">Nothing logged yet — this would be the first entry.</p>
+            ) : (
+              <ul className="flex flex-col gap-1.5">
+                {existingEntries.map((entry) => (
+                  <li key={entry.movement_id} className="flex items-center justify-between gap-2">
+                    <span className="font-ui text-small text-text">
+                      <span className="font-data tabular-nums">{formatQty(entry.qty)}</span>{" "}
+                      {wasteReasons.find((r) => r.reason_code === entry.reason_code)?.label ??
+                        entry.reason_code ??
+                        "—"}
+                      {entry.created_by_full_name && (
+                        <span className="text-text-3"> — logged by {entry.created_by_full_name}</span>
+                      )}
+                      <span className="text-text-3"> ({formatDateTime(entry.created_at)})</span>
+                    </span>
+                    {entry.is_reversed ? (
+                      <Badge tone="neutral">Reversed</Badge>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => reverseMutation.mutate(entry.movement_id)}
+                        disabled={reverseMutation.isPending}
+                        className="shrink-0 font-ui text-small text-negative hover:underline disabled:opacity-50"
+                      >
+                        Reverse
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
         <Field label="Reason" htmlFor="w_reason">
           <Select
             id="w_reason"

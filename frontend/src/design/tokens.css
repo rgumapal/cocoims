@@ -108,6 +108,14 @@
   --tint-teal-bg: #e2f1f2;
   --tint-slate-fg: var(--n-600);
   --tint-slate-bg: var(--n-100);
+  /* Deliberately olive/amber, not the brand gold (--gold-500) — CLAUDE.md
+     DESIGN restricts gold to five specific accent uses, so a Dashboard
+     icon chip (a sixth, decorative use) needs its own distinct yellow
+     rather than borrowing the accent hue. */
+  --tint-yellow-fg: #8a6d1f;
+  --tint-yellow-bg: #f7f0d9;
+  --tint-orange-fg: #b35900;
+  --tint-orange-bg: #fbebe0;
 
   --shadow-1: 0 1px 2px rgba(28, 27, 25, 0.06);
   --shadow-2: 0 4px 12px rgba(28, 27, 25, 0.1);
@@ -156,6 +164,10 @@
   --tint-teal-bg: #102e31;
   --tint-slate-fg: var(--n-300);
   --tint-slate-bg: var(--n-800);
+  --tint-yellow-fg: #d9c568;
+  --tint-yellow-bg: #332c14;
+  --tint-orange-fg: #e8935a;
+  --tint-orange-bg: #3a2415;
 
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.5);

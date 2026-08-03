@@ -45,7 +45,7 @@ export interface SalesSummary {
 }
 
 export interface WasteSummary {
-  items_logged_today: number;
+  entries_logged_today: number; // total waste log rows, not distinct items
   branches_logged_today: number;
 }
 
@@ -342,6 +342,22 @@ export interface SalesLine {
   // trail for "who last touched this line," distinct from confirmed_by_name
   // (an optional free-text note on who rang it up).
   updated_at: string | null;
+}
+
+// GET /api/v1/waste — every original WASTE row on file for one
+// branch/item/date, not a single net figure: unlike Receiving/Sales,
+// multiple waste entries for the same combination are legitimate.
+export interface WasteEntry {
+  movement_id: number;
+  business_date: string;
+  item_code: string;
+  qty: string;
+  reason_code: string | null;
+  production_date: string | null;
+  created_by: number | null;
+  created_by_full_name: string | null;
+  created_at: string | null;
+  is_reversed: boolean;
 }
 
 // ---------------------------------------------------------------------

@@ -58,7 +58,7 @@ class SalesSummary(BaseModel):
 
 
 class WasteSummary(BaseModel):
-    items_logged_today: int
+    entries_logged_today: int  # total waste log rows, not distinct items
     branches_logged_today: int
 
 
@@ -97,9 +97,12 @@ class DashboardOut(BaseModel):
     branches: BranchesSummary | None
 
 
-def _distinct_items_moved(session: Session, movement_type: str, business_date: dt.date) -> int:
+def _movement_count(session: Session, movement_type: str, business_date: dt.date) -> int:
+    """Total rows, not distinct items — how many separate waste log entries
+    were filed today, since one item can legitimately be logged more than
+    once in a day (different reasons, different batches)."""
     return session.execute(
-        select(func.count(func.distinct(StockMovement.item_code))).where(
+        select(func.count()).select_from(StockMovement).where(
             StockMovement.movement_type == movement_type,
             StockMovement.business_date == business_date,
         )
@@ -247,7 +250,7 @@ def get_dashboard(
         receiving = _receiving_summary(session, today)
         sales = _sales_summary(session, today)
         waste = WasteSummary(
-            items_logged_today=_distinct_items_moved(session, "WASTE", today),
+            entries_logged_today=_movement_count(session, "WASTE", today),
             branches_logged_today=_distinct_branches_moved(session, "WASTE", today),
         )
         run_outs_today = session.execute(
